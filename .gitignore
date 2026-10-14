@@ -69,3 +69,6 @@ build/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# saídas brutas dos workers (o aceito vai para o projeto)
+/work/out/
