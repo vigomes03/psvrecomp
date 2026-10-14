@@ -10,7 +10,7 @@ chunks de ~1.500 funções → `clang -O1`. Testes: `test_lift.py`, `test_simd.p
 ## Tarefas
 - [x] 1.1 🧠 (14/10, commit local; test_simd 74.950 casos 0 falhas) Criar `Pokemon Decompile/` como **fork local** de `LASRecomp-main/tools` + `runtime/cpu.h`, `simd*.h`
   (cabeçalho MIT preservado). Renomear `LARECOMP_*` → `PVR_*`, `lasgame` → `pvgame`.
-- [ ] 1.2 🧠 Generalizar `gen.py` para **N módulos** (main, sdk, subsdk0..n) com bases de carga do npdm/rtld,
+- [x] 1.2 🧠 (14/10: `layout.py` + `pvgame.h`/`pvgame_entry.c`; o gen.py já gerava por módulo) Generalizar `gen.py` para **N módulos** (main, sdk, subsdk0..n) com bases de carga do npdm/rtld,
   tabelas de função por módulo e `dispatch` com N tabelas.
 - [x] 1.3 🤖 (14/10: única família faltante era LDXP/LDAXP/STXP/STLXP de 64 bits, 15.832 ocorrências → W01/W02, 0 restantes) Cartões: cobrir as instruções que o censo da fase 0 apontou como não suportadas. Cada cartão =
   1 grupo de encodings + teste diferencial no Unicorn como critério de aceite.
@@ -44,3 +44,13 @@ Conclusão: escala **não é problema** na máquina (32 GB). Próximo foco da fa
 - **1.7**: 5.801 fallbacks é muito mais que o Zelda (correto, mas incha o código e é lento). Investigar o padrão das tabelas
   que o emulador de jump table não reconhece.
 - `sdk` + `subsdk0` (N módulos, 1.2) e linkar uma `pvgame.dll` (M1).
+
+## M1 "Compila" ✅ (14/10)
+- Layout próprio (`recomp/layout.py`): `main` 0x7000000000 (68 MiB, não cabe nos 64 MiB do layout do Zelda), `subsdk0`
+  0x7004400000, `sdk` 0x7004c00000; 90 MiB no total.
+- `subsdk0`: 17.807 funções / 96 arquivos; `sdk`: 45.923 / 107; ambos compilam com 0 erros.
+- **Interface jogo ↔ runtime**: os 271 mil símbolos gerados dependem só de `rt_dispatch`, `rt_svc`, `rt_brk`, `rt_udf`,
+  `rt_ticks`, `fnprof_hit`, `g_fnprof` (+ `fegetround`/`fesetround`/`___chkstk_ms` da libc). Nenhuma referência pendente entre módulos.
+- `recomp/link_m1.sh`: linka `pvgame.dll` (271 MB, lld < 1 s) contra um host de verificação (`m1_host.c`, runtime
+  como armadilhas) e valida as tabelas: **271.027 funções nos 3 módulos, OK**.
+- Pipeline completo do zero: gerar ~50 s + compilar ~3 min + linkar < 1 s.
