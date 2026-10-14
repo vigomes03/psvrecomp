@@ -1,0 +1,4 @@
+# LF everywhere: bash scripts break with CRLF (Git for Windows defaults to autocrlf)
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf

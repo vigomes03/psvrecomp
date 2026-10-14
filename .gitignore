@@ -1,0 +1,70 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# REA workspace: só o NOSSO trabalho entra no git (docs/, tools/, CLAUDE.md...).
+# Projetos de referência, dumps do console e saídas de análise ficam fora.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Projetos de referência (código de terceiros; estudamos, não versionamos) ──
+/rea-main/
+/LASRecomp-main/
+/LASRecomp-git/
+/eden-master/
+
+# ── Conteúdo PRIVADO: dumps do seu Switch (nunca commitar, nunca publicar) ──
+/Pokémon Violet/
+/Pokemon Violet/
+/Pokémon Scarlet/
+/Pokemon Scarlet/
+/dumps/
+# formatos de jogo/sistema do Switch, em qualquer pasta
+*.xci
+*.xcz
+*.nsp
+*.nsz
+*.nca
+*.ncz
+*.nso
+*.nro
+*.npdm
+*.kip
+*.ticket
+*.tik
+*.cert
+# chaves do console
+prod.keys
+title.keys
+dev.keys
+*.keys
+# conteúdo extraído do jogo (exefs/romfs) e tudo que é derivado dele
+extracted/
+exefs/
+romfs/
+**/generated/
+**/generated-*/
+# saídas de Ghidra/IDA/REA sobre o jogo (contêm código/nomes da Nintendo/Game Freak)
+*.gpr
+*.rep/
+*.i64
+*.idb
+*.reasnap
+
+# ── Laboratório: alvos, snapshots e relatórios brutos do worker ──
+/lab/
+
+# ── Ferramentas, ambientes e caches da máquina ──
+.venv/
+venv/
+__pycache__/
+*.pyc
+node_modules/
+build/
+/cache/
+*.log
+*.log.jsonl
+
+# ── Editor / SO ──
+/.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
