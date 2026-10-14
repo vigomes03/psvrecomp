@@ -8,7 +8,7 @@ testes diferenciais.
 chunks de ~1.500 funções → `clang -O1`. Testes: `test_lift.py`, `test_simd.py`.
 
 ## Tarefas
-- [ ] 1.1 🧠 Criar `Pokemon Decompile/` como **fork local** de `LASRecomp-main/tools` + `runtime/cpu.h`, `simd*.h`
+- [x] 1.1 🧠 (14/10, commit local; test_simd 74.950 casos 0 falhas) Criar `Pokemon Decompile/` como **fork local** de `LASRecomp-main/tools` + `runtime/cpu.h`, `simd*.h`
   (cabeçalho MIT preservado). Renomear `LARECOMP_*` → `PVR_*`, `lasgame` → `pvgame`.
 - [ ] 1.2 🧠 Generalizar `gen.py` para **N módulos** (main, sdk, subsdk0..n) com bases de carga do npdm/rtld,
   tabelas de função por módulo e `dispatch` com N tabelas.
@@ -19,7 +19,7 @@ chunks de ~1.500 funções → `clang -O1`. Testes: `test_lift.py`, `test_simd.p
 - [ ] 1.6 🧠 Escala: gerar 100% do `main`; medir tempo, tamanho do C e tempo de compilação. Se não couber:
   paralelizar o `gen.py` (multiprocessing por faixa de funções) e `make -j` com limite de RAM.
 - [ ] 1.7 🤖 Relatório de jump tables: resolvidas / fallback "all labels" / `br` de dispatch. Meta: fallback < 1%.
-- [ ] 1.8 🧠 `patches.py` vazio, com o mecanismo pronto (patch que confere a palavra original).
+- [x] 1.8 🧠 `patches.py` vazio, com o mecanismo pronto (patch que confere a palavra original).
 
 ## Critério de saída (M1)
 `make gen && make` produz `pvgame.dll` sem erros; `test_lift.py` e `test_simd.py` verdes; relatório com
