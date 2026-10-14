@@ -388,8 +388,9 @@ class Lifter:
                                            bits(w, 16, 5), bits(w, 15, 1), bits(w, 5, 5), bits(w, 0, 5))
         nbits = 8 << size
         addr = XS(rn)
-        if o1:
-            raise Unsupported('exclusive pair / CAS')
+        if o1:  # exclusive pairs (Pokémon Violet uses 64-bit LDXP/STXP; CAS still unsupported)
+            from excl_pair import lift_excl_pair
+            return lift_excl_pair(w, pc)
         if o2 == 0:
             if L:
                 return Insn('op', set_reg(1, rt, f'ldx{nbits}(c, {addr})'))

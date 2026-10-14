@@ -10,3 +10,9 @@ Chamadores: `FUN_140003498` (call em 0x14000377c) e `FUN_140003b3c` (call em 0x1
 | 2 | rea_worker v1 | 13 | 5m30 | REJEITADO | honesto, mas seguiu a string em .rdata; "sem referências" citando o xrefs errado |
 | 3 | rea_worker v2 (+callers) | 7 | 5m28 | ACEITO c/ correção | função certa e código verbatim; inventou o chamador `FUN_14000377c` (era endereço de chamada) |
 | 4 | rea_worker v3 (+checagem de símbolos) | 7 | 7m58 | ACEITO c/ ressalvas | função + 2 chamadores certos; ids citados = decompile (não xrefs); seção de código vazia |
+
+## Lições dos cartões de código (W01/W02)
+- O qwen confunde `bits(w, lo, n)` com "bit alto": na tabela de campos do cartão, escreva a **chamada pronta** (`bits(w, 16, 5)`), não "bits 20:16".
+- Numa retry ele "melhora" partes que já estavam certas (mudou o tipo `Insn('op')`). No cartão de retry, liste o que **não** pode mudar,
+  e o teste de aceite deve checar a interface (tipo/assinatura), não só o texto ou o resultado.
+- Teste diferencial contra oráculo (Unicorn) pegou o erro que a leitura rápida não pegaria.
