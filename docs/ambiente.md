@@ -14,6 +14,7 @@ Máquina: Windows 11, RTX 3070 Ti 8 GB, 32 GB RAM, C: quase cheio, então **tudo
 | MSYS2 UCRT64 (clang 23, lld, make, SDL3, FFmpeg, Vulkan, shaderc, SPIRV-Tools, gdb) | `D:\msys64` | compilar LASRecomp / código nativo | ✅ `lasrecomp.exe` compila e abre |
 | Python 3.12 (uv) + unicorn 2.1.4, capstone 5.0.9, lz4 | `LASRecomp-main\...\tools\venv` | lifter / testes diferenciais | ✅ `test_simd.py` 0 falhas |
 | Zig 0.17.0 | `LASRecomp-main\...\build\zig` | `zig cc` | ✅ hash conferido |
+| hactool (SciresM, `1d64a83`, compilado do fonte com WinLibs) | `D:\Tools\hactool\hactool.exe` (fonte em `D:\Tools\src\hactool`) | ler/extrair XCI/NCA/RomFS | ✅ lê o cabeçalho do XCI sem chaves |
 | Ollama + `qwen3-coder-64k` | serviço local `127.0.0.1:11434` | worker local | ✅ |
 
 ## Recompilar o addon nativo do REA (se `native/windows/src` mudar)
@@ -29,9 +30,12 @@ O artefato do npm 6.4.0 **não serve** para este snapshot (`privateBridgeDescrip
 - REA MCP completo = 207 ferramentas (~220k tokens). No Hermes, `tools.include` com 21 ferramentas + `compact` (~8k).
 - Cada chamada CLI do REA reimporta no Ghidra (~20 s). A sessão MCP mantém o Ghidra aberto.
 - Janelas de teste não rodam sob `timeout` do MSYS: use Python `subprocess` com `timeout`.
+- **`make` do MSYS2 + gcc nativo perde o `TMP`** (gcc: `Cannot create temporary file in C:\WINDOWS\`). Para projetos com Makefile simples use o `mingw32-make` do WinLibs, com `TMP` apontando para o Temp do Windows.
 - Variáveis de usuário gravadas com `setx`: `GHIDRA_INSTALL_DIR`, `JAVA_HOME`.
 
 ## Ainda NÃO instalado (próximo passo para o projeto Pokémon)
-- Extração do `.xci`: **hactool/hactoolnet** (ou nstool) + as **suas** `prod.keys`/`title.keys`, tiradas do **seu** console
-  (Lockpick_RCM). Saída em `dumps/` (ignorado pelo git).
+- **Chaves**: `prod.keys` (e `title.keys`, se houver) tiradas do **seu** console com Lockpick_RCM →
+  colocar em `D:\Dev\REA\keys\` (ignorado pelo git). Sem elas, o hactool só lê o cabeçalho do XCI.
+- Dump: `Pokémon Violet.xci`, cartucho 8 GB; partições `update` (225 arquivos, firmware), `logo`, `normal` (vazia),
+  `secure` (o jogo, NCAs criptografados). Extração vai para `dumps/` (ignorado).
 - Formatos de asset da Game Freak (TRPAK/FlatBuffers etc.) ainda sem ferramenta escolhida.

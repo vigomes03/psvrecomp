@@ -29,7 +29,8 @@
 *.ticket
 *.tik
 *.cert
-# chaves do console
+# chaves do console (guarde em /keys/)
+/keys/
 prod.keys
 title.keys
 dev.keys
