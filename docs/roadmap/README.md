@@ -13,7 +13,7 @@ Base técnica: [estudo-lasrecomp.md](../estudo-lasrecomp.md) (como o Zelda foi f
 
 | # | Fase | Saída (marco verificável) | Equivalente no LAS Recomp | Status |
 |---|---|---|---|---|
-| 0 | [Aquisição e reconhecimento](fase-0-aquisicao.md) | dump extraído (base + update), inventário do executável, decisão de "vale/não vale" | dump do usuário + `nso.py`/`analyze.py` | ⏳ esperando chaves (Switch 1 com CFW) |
+| 0 | [Aquisição e reconhecimento](fase-0-aquisicao.md) | dump extraído (base + update), inventário do executável, decisão de "vale/não vale" | dump do usuário + `nso.py`/`analyze.py` | 🟡 extraído (v1.0.0); inventário inicial feito |
 | 1 | [Recompilador](fase-1-recompilador.md) | todo o `main` vira C que **compila**; testes diferenciais verdes | `tools/gen.py`, `lifter.py`, `simd_c.py` | 🟡 fork pronto |
 | 2 | [Runtime mínimo / boot headless](fase-2-runtime-boot.md) | o jogo roda `nn::init::Start` → `nnMain` e chega ao loop principal **sem gráficos** | `loader.c`, `kernel.c`, `dispatch.c`, `ipc.c`, `services/` | ⬜ |
 | 3 | [Sistema de arquivos e dados](fase-3-arquivos.md) | o jogo lê o romfs (base + patch) e os arquivos `trpfs` sozinho | `services/fs.c`, `romfs_build.c` | ⬜ |
