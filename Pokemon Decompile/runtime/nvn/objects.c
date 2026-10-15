@@ -1,4 +1,6 @@
+#include <stdio.h>
 // NVN objects, builders, and state objects (everything except command recording).
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -180,12 +182,25 @@ NVN(nvnMemoryPoolBuilderGetFlags) { RET(G(uint32_t, A(0), 8)); }
 NVN(nvnMemoryPoolBuilderGetMemory) { RET(G(uint64_t, A(0), 0x10)); }
 NVN(nvnMemoryPoolBuilderGetSize) { RET(G(uint64_t, A(0), 0x18)); }
 
+// Every GPU memory pool the game creates (PVRecomp): the Vulkan backend imports windows over them so shader global
+// memory (LDG/STG/ATOM) can reach pools outside the heap (the SDK 13 VAMM puts them all in the alias region).
+uint64_t g_nvn_pool_ranges[4096][2];
+int g_nvn_pool_count;
+uint32_t g_nvn_pool_gen;
+
 NVN(nvnMemoryPoolInitialize) {
     NvnPool *p = calloc(1, sizeof *p);
     p->storage = G(uint64_t, A(1), 0x10);
     p->size = G(uint64_t, A(1), 0x18);
     p->flags = G(uint32_t, A(1), 8);
     SET_HOST(A(0), p);
+    if (p->size && g_nvn_pool_count < 4096) {
+        g_nvn_pool_ranges[g_nvn_pool_count][0] = p->storage;
+        g_nvn_pool_ranges[g_nvn_pool_count++][1] = p->size;
+        g_nvn_pool_gen++;
+    }
+    if (getenv("PVR_DIAG_POOLS")) LOG("[pool] storage %llx size %llx (%llu MB) flags %#x\n", (unsigned long long)p->storage,
+                                      (unsigned long long)p->size, (unsigned long long)(p->size >> 20), p->flags);
     RET(1);
 }
 NVN(nvnMemoryPoolFinalize) { free(HOST(NvnPool, A(0))); SET_HOST(A(0), 0); }
@@ -356,15 +371,51 @@ static NvnTexture *texture_from_builder(uint64_t b) {
 
 NVN(nvnTextureInitialize) {
     NvnTexture *t = texture_from_builder(A(1));
+    {   // (PVRecomp, debug) PVR_LOG_TEXADDR=<hex>: log every texture whose storage covers that guest address
+        static uint64_t wa = 1;
+        if (wa == 1) wa = getenv("PVR_LOG_TEXADDR") ? strtoull(getenv("PVR_LOG_TEXADDR"), NULL, 16) : 0;
+        if (wa && t->addr && wa >= t->addr && wa < t->addr + builder_storage_size(A(1)))
+            LOG("[texaddr] %p %ux%u fmt %#x target %u flags %#x levels %u addr %llx size %llu\n", (void *)t, t->width, t->height,
+                t->format, t->target, t->flags, t->levels, (unsigned long long)t->addr, (unsigned long long)builder_storage_size(A(1)));
+    }
     if (t->flags & 2)
         LOG("[nvn] video texture %p: %ux%u fmt %#x flags %#x target %u addr %llx stride %llu\n", t, t->width, t->height,
             t->format, t->flags, t->target, t->addr, t->stride);
     SET_HOST(A(0), t);
     RET(1);
 }
+// (PVRecomp) Finalize runs on one game thread while another may be executing a command list (or presenting) that
+// still references the texture: freeing at once was a use-after-free (crash in vulkan/exec.c begin_pass, intermittent).
+// The texture goes to a graveyard and is destroyed TEX_GRAVE_FRAMES presents later, from the present path.
+#define TEX_GRAVE_FRAMES 4
+static pthread_mutex_t grave_lock = PTHREAD_MUTEX_INITIALIZER;
+static NvnTexture **grave;
+static uint64_t *grave_frame;
+static int ngrave, cgrave;
+static uint64_t grave_now;
+static void texture_reap(void) {
+    pthread_mutex_lock(&grave_lock);
+    grave_now++;
+    int k = 0;
+    for (int i = 0; i < ngrave; i++) {
+        if (grave_now - grave_frame[i] >= TEX_GRAVE_FRAMES) { backend_texture_destroyed(grave[i]); free(grave[i]); }
+        else { grave[k] = grave[i]; grave_frame[k++] = grave_frame[i]; }
+    }
+    ngrave = k;
+    pthread_mutex_unlock(&grave_lock);
+}
 NVN(nvnTextureFinalize) {
     NvnTexture *t = HOST(NvnTexture, A(0));
-    if (t) { backend_texture_destroyed(t); free(t); }
+    if (t) {
+        pthread_mutex_lock(&grave_lock);
+        if (ngrave == cgrave) {
+            cgrave = cgrave ? cgrave * 2 : 256;
+            grave = realloc(grave, cgrave * sizeof *grave);
+            grave_frame = realloc(grave_frame, cgrave * sizeof *grave_frame);
+        }
+        grave[ngrave] = t; grave_frame[ngrave++] = grave_now;
+        pthread_mutex_unlock(&grave_lock);
+    }
     SET_HOST(A(0), 0);
 }
 NVN(nvnTextureSetDebugLabel) {
@@ -422,6 +473,8 @@ NVN(nvnTextureWriteTexels) {
     // (texture, view, region, data) -- linear data into block-linear storage
     NvnTexture *t = HOST(NvnTexture, A(0));
     const int32_t *r = AP(2);  // xoffset, yoffset, zoffset, width, height, depth
+    if (getenv("PVR_LOG_COPIES")) LOG("[writetexels] %p %ux%u f%#x region %d,%d %dx%d\n", (void *)t, t->width, t->height, t->format,
+                                      r ? r[0] : -1, r ? r[1] : -1, r ? r[3] : -1, r ? r[4] : -1);
     LevelLayout l = tegra_level(&t->layout, 0);
     if (r && r[0] == 0 && r[1] == 0 && (uint32_t)r[3] == t->width && (uint32_t)r[4] == t->height) {
         tegra_swizzle(AP(3), (uint8_t *)(uintptr_t)t->addr + l.offset, l.wb, l.hb, r[5] > 0 ? (uint32_t)r[5] : 1,
@@ -433,7 +486,7 @@ NVN(nvnTextureWriteTexels) {
 }
 NVN(nvnTextureWriteTexelsStrided) { LOG("[nvn] WriteTexelsStrided not implemented\n"); (void)c; }
 NVN(nvnTextureReadTexels) { LOG("[nvn] ReadTexels not implemented\n"); (void)c; }
-NVN(nvnTextureReadTexelsStrided) { (void)c; }
+NVN(nvnTextureReadTexelsStrided) { LOG("[nvn] ReadTexelsStrided not implemented\n"); (void)c; }
 
 // ================================================================== samplers
 // SamplerBuilder: device@0 then a PACKED sampler state (SamplerB, 0x30 bytes). PVRecomp: LAS stored a whole
@@ -607,6 +660,12 @@ static void set_shaders(Cpu *c, int stride) {
         p->stages[stage].const_offset = *(const uint32_t *)(control + 0x700);
         p->stages[stage].const_size = *(const uint32_t *)(control + 0x6FC);
         p->stage_mask |= 1u << stage;
+        if (getenv("PVR_DIAG_CTRL") && stage == 0) {  // (PVRecomp diag) dump vertex control sections: build/ctrl/<code>.bin
+            char path[96];
+            snprintf(path, sizeof path, "build/ctrl/%llx.bin", (unsigned long long)code);
+            FILE *f = fopen(path, "wb");
+            if (f) { fwrite(control, 1, 0x1000, f); fclose(f); }
+        }
     }
     RET(1);
 }
@@ -671,6 +730,7 @@ NVN(nvnQueuePresentTexture) {
     NvnWindow *w = HOST(NvnWindow, A(1));
     int i = (int)A(2);
     if (i >= 0 && i < w->num) backend_present(HOST(NvnTexture, w->textures[i]));
+    texture_reap();
 }
 
 // ================================================================== small state objects

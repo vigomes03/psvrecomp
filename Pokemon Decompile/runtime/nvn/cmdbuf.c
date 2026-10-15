@@ -119,7 +119,8 @@ static CmdRec *record_copy(Cpu *c, uint32_t op, int arg, uint32_t len) {
 NVN(nvnCommandBufferBindProgram) {
     Snap s = snap(c);
     CmdRec *r = record(c, CMD_BIND_PROGRAM, 0, &s);
-    r->x[0] = (uint64_t)(uintptr_t)HOST(NvnProgram, s.x[1]);  // host program
+    r->x[0] = (uint64_t)(uintptr_t)HOST(NvnProgram, s.x[1]);  // host program (NULL: unbind)
+    r->x[1] = s.x[2];  // NVNshaderStageBits: only these stages change (PVRecomp: BindProgram(NULL, FRAGMENT) = depth-only)
 }
 NVN(nvnCommandBufferBindBlendState) { record_copy(c, CMD_BIND_BLEND, 1, 8); }
 NVN(nvnCommandBufferBindChannelMaskState) { record_copy(c, CMD_BIND_CHANNEL_MASK, 1, 4); }
@@ -177,8 +178,18 @@ NVN(nvnCommandBufferBindSeparateTexture) {
 }
 NVN(nvnCommandBufferBindSeparateSamplers) { (void)c; }
 NVN(nvnCommandBufferBindSeparateSampler) { (void)c; }
-NVN(nvnCommandBufferBindTransformFeedbackBuffers) { (void)c; }
-NVN(nvnCommandBufferBindTransformFeedbackBuffer) { (void)c; }
+// Transform feedback (PVRecomp): the game builds character vertices with it (vulkan/exec.c xfb_*).
+// BindTransformFeedbackBuffers(cmd, first, count, const NVNbufferRange {u64 address, u64 size} *)
+NVN(nvnCommandBufferBindTransformFeedbackBuffers) {
+    Snap s = snap(c);
+    const uint64_t *rg = AP(3);
+    for (int i = 0; i < (int)s.x[2] && i < 4; i++) {
+        CmdRec *r = record(c, CMD_XFB_BIND, 0, &s);
+        r->x[0] = s.x[1] + (uint64_t)i; r->x[1] = rg[2 * i]; r->x[2] = rg[2 * i + 1];
+    }
+}
+// BindTransformFeedbackBuffer(cmd, index, address, size)
+NVN(nvnCommandBufferBindTransformFeedbackBuffer) { Snap s = snap(c); record(c, CMD_XFB_BIND, 0, &s); }
 NVN(nvnCommandBufferBindCoverageModulationTable) { (void)c; }
 
 NVN(nvnCommandBufferSetTexturePool) {
@@ -368,14 +379,14 @@ PLAIN(nvnCommandBufferDrawArraysIndirect, CMD_DRAW_ARRAYS_INDIRECT)
 PLAIN(nvnCommandBufferDrawElementsIndirect, CMD_DRAW_ELEMENTS_INDIRECT)
 NVN(nvnCommandBufferMultiDrawArraysIndirectCount) { (void)c; }
 NVN(nvnCommandBufferMultiDrawElementsIndirectCount) { (void)c; }
-NVN(nvnCommandBufferDrawTransformFeedback) { (void)c; }
+NVN(nvnCommandBufferDrawTransformFeedback) { static int n; if (n++ < 10) LOG("[xfb] DrawTransformFeedback not implemented (mode %d counter %llx)\n", (int)A(1), (unsigned long long)A(2)); }
 NVN(nvnCommandBufferDrawTexture) { (void)c; }
 PLAIN(nvnCommandBufferDispatchCompute, CMD_DISPATCH)
 PLAIN(nvnCommandBufferDispatchComputeIndirect, CMD_DISPATCH_INDIRECT)
-NVN(nvnCommandBufferBeginTransformFeedback) { (void)c; }
-NVN(nvnCommandBufferEndTransformFeedback) { (void)c; }
-NVN(nvnCommandBufferPauseTransformFeedback) { (void)c; }
-NVN(nvnCommandBufferResumeTransformFeedback) { (void)c; }
+PLAIN(nvnCommandBufferBeginTransformFeedback, CMD_XFB_BEGIN)  // (arg 1: counter buffer address)
+PLAIN(nvnCommandBufferEndTransformFeedback, CMD_XFB_END)  // (arg 1: counter buffer address)
+PLAIN(nvnCommandBufferPauseTransformFeedback, CMD_XFB_PAUSE)  // (arg 1: counter buffer address)
+PLAIN(nvnCommandBufferResumeTransformFeedback, CMD_XFB_RESUME)  // (arg 1: counter buffer address)
 
 // ---- copies
 typedef struct { uint64_t tex; NvnTextureView view; uint8_t has_view; int32_t region[6]; } TexRef;
