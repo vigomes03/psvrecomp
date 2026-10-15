@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# ===== AUTOMATIC (Claude's pipeline): scripted input + screenshots + frame stats, retries on crash.
+# Usage: tools/verify/run_auto.sh [seconds=240] [tag=auto] [extra VAR=value ...]
+#   Input: A every 1 s from 3 s, left stick right for 300 ms every 5 s (passes "choose a look"), as found 15/10.
+#   Override with PVR_AUTOPRESS / PVR_INPUT in the environment (e.g. PVR_INPUT=3000:A,6000:STICK_DOWN:300).
+#   Output: lab/host-vk/<tag>.log, frames in lab/host-vk/build/frames (every 100 frames), stats printed.
+#   Retries up to 3x when the run dies (FATAL / access violation: the intermittent Lua panic of v400).
+# Manual play (you at the keyboard / gamepad) is "Pokemon Decompile/recomp/run_window.cmd".
+set -u
+SECS=${1:-240}
+TAG=${2:-auto}
+shift 2 2>/dev/null || shift $#
+H=/d/Dev/REA/lab/host-vk
+export PATH="/d/msys64/ucrt64/bin:$PATH"
+export PVR_SYSFONT_DIR=${PVR_SYSFONT_DIR:-D:/Dev/REA/lab/sysfont}
+export PVR_DISPLAY=${PVR_DISPLAY:-2}  # (window on the 2nd monitor: [USER] works on the primary)
+export PVR_AUTOPRESS=${PVR_AUTOPRESS:-A:1000:100:3000}
+if [ -z "${PVR_INPUT:-}" ]; then
+  PVR_INPUT=$(python -c "print(','.join(f'{t}:STICK_RIGHT:300' for t in range(5500, $SECS*1000+5000, 5000)))")
+fi
+export PVR_INPUT
+export LARECOMP_SCREENSHOT_EVERY=${LARECOMP_SCREENSHOT_EVERY:-100} LARECOMP_SCREENSHOT_FROM=${LARECOMP_SCREENSHOT_FROM:-100}
+export PVR_RUN_SECONDS=$SECS
+cd "$H" || exit 1
+for i in 1 2 3; do
+  rm -rf build && mkdir -p build/frames
+  env "$@" ./pvhost.exe D:/Dev/REA/dumps/v400/exefs D:/Dev/REA/dumps/v400/romfs > "$TAG.log" 2>&1
+  bad=$(grep -c "FATAL\|exception c0000005" "$TAG.log")
+  echo "run $i: bad=$bad last=$(grep -o 'frame [0-9]*' "$TAG.log" | tail -1) log=$H/$TAG.log"
+  [ "$bad" = 0 ] && break
+done
+python D:/Dev/REA/tools/verify/frame_stats.py build/frames/*.png | awk '{print $1, "mean", $5, "colors", $7}' | tr -d "{},'"
+[ "$bad" = 0 ]

@@ -73,6 +73,16 @@ static _Atomic int g_reboot;
 void rt_request_reboot(int kind) { g_reboot = kind; }
 int rt_reboot_requested(void) { return g_reboot; }
 
+#ifdef PVR_VULKAN
+static DWORD WINAPI run_limit_thread(LPVOID p) {  // window mode: end the run after PVR_RUN_SECONDS (same log line)
+    Sleep((DWORD)*(int *)p * 1000);
+    LOG("[pvhost] time limit reached, exiting\n");
+    if (getenv("PVR_DUMP_THREADS")) { extern void kernel_dump_threads(void); kernel_dump_threads(); }
+    plat_terminate();
+    return 0;
+}
+#endif
+
 int main(int argc, char **argv) {
     plat_init();
     setvbuf(stderr, NULL, _IONBF, 0);
@@ -112,6 +122,19 @@ int main(int argc, char **argv) {
     kernel_run_main(t, t->handle, 0, init_sdk, init_main, fini);
 
     int secs = getenv("PVR_RUN_SECONDS") ? atoi(getenv("PVR_RUN_SECONDS")) : 60;
+#ifdef PVR_VULKAN
+    // Window build: the main thread owns the SDL window + event loop (ui_run creates the window and the Vulkan device,
+    // then the guest's backend_init stops waiting). PVR_RUN_SECONDS > 0 still ends the run, from a timer thread.
+    if (secs > 0) {
+        static int limit;
+        limit = secs;
+        CreateThread(NULL, 0, run_limit_thread, &limit, 0, NULL);
+    }
+    LOG("[pvhost] window mode (Vulkan), %d s limit\n", secs);
+    extern int ui_run(void);
+    ui_run();
+    return 0;
+#endif
     LOG("[pvhost] running headless for %d s\n", secs);
     Sleep((DWORD)secs * 1000);
     LOG("[pvhost] time limit reached, exiting\n");

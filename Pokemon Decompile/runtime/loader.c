@@ -138,6 +138,22 @@ static uint64_t resolve(Module *m, uint32_t symidx) {
     Elf64Sym *s = sym(m, symidx);
     const char *name = symname(m, s);
     if (s->shndx) return m->base + s->value;
+    {   // PVR_LIST_IMPORTS=<substring>: log the imports whose name contains it (finding SDK functions to HLE)
+        static const char *want = (const char *)1;
+        if (want == (const char *)1) want = getenv("PVR_LIST_IMPORTS");
+        if (want && strstr(name, want)) LOG("[import] %s\n", name);
+        static int symat_done;  // PVR_SYM_AT=<addr>,<addr>...: name the guest functions at those addresses (crash triage)
+        const char *sa = getenv("PVR_SYM_AT");
+        if (sa && !symat_done && g_nmodules >= 3) {
+            symat_done = 1;
+            for (const char *p = sa; *p;) {
+                uint64_t a = strtoull(p, (char **)&p, 16), off = 0;
+                const char *n = loader_symbol_at(a, &off);
+                LOG("[symat] %llx = %s+%#llx\n", (unsigned long long)a, n ? n : "?", (unsigned long long)off);
+                if (*p == ',') p++; else break;
+            }
+        }
+    }
     HostFn impl = hle_lookup_impl(name);
     if (impl) return hle_register(name, impl);  // host implementation wins over the guest SDK's
     uint64_t a = loader_find_symbol(name);
