@@ -16,6 +16,11 @@ seed (layering). Saves em pasta própria.
 - [ ] 3.5 🤖 (Estudo, paralelo) Parser de `trpfd`/`trpfs` em Python para **listar** o conteúdo (nomes/hashes),
   com o critério "lista bate com o que o jogo pede no log do `fsp-srv`".
 
+## Estado em 15/10 (revisão com o [USER])
+- 🟢 Na prática a fase está cumprida pelo porte do LAS: o jogo lê romfs/trpfs sozinho e o **save é persistente**
+  (fechar, reabrir e carregar funciona — teste manual do [USER]). 3.1-3.4 ficam como "atendidos pelo porte"; 3.5
+  (parser de estudo) continua aberto.
+
 ## Critério de saída
 Log de `fsp-srv`: todo arquivo pedido no boot é achado; nenhum `PathNotFound` inesperado; save cria e lê.
 

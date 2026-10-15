@@ -13,18 +13,38 @@ Base técnica: [estudo-lasrecomp.md](../estudo-lasrecomp.md) (como o Zelda foi f
 
 | # | Fase | Saída (marco verificável) | Equivalente no LAS Recomp | Status |
 |---|---|---|---|---|
-| 0 | [Aquisição e reconhecimento](fase-0-aquisicao.md) | dump extraído (base + update), inventário do executável, decisão de "vale/não vale" | dump do usuário + `nso.py`/`analyze.py` | 🟡 extraído (v1.0.0); inventário inicial feito |
-| 1 | [Recompilador](fase-1-recompilador.md) | todo o `main` vira C que **compila**; testes diferenciais verdes | `tools/gen.py`, `lifter.py`, `simd_c.py` | ✅ **M1** (pvgame.dll com 271k funções); falta 1.7 jump tables |
-| 2 | [Runtime mínimo / boot headless](fase-2-runtime-boot.md) | o jogo roda `nn::init::Start` → `nnMain` e chega ao loop principal **sem gráficos** | `loader.c`, `kernel.c`, `dispatch.c`, `ipc.c`, `services/` | ⬜ |
-| 3 | [Sistema de arquivos e dados](fase-3-arquivos.md) | o jogo lê o romfs (base + patch) e os arquivos `trpfs` sozinho | `services/fs.c`, `romfs_build.c` | ⬜ |
-| 4 | [Gráficos: NVN → Vulkan](fase-4-graficos.md) | **primeiro frame**: logo / tela de título renderizada | `runtime/nvn/*`, `maxwell/translate.c`, `vulkan/` | ⬜ |
-| 5 | [Áudio, input, save, tempo](fase-5-sistemas.md) | controle funciona, som toca, save grava/carrega | `services/audio.c`, `hle/input.c`, `fs.c` (save) | ⬜ |
-| 6 | [Jogável](fase-6-jogavel.md) | começar um jogo novo e andar pelo mapa aberto | ciclo shot.sh + correções | ⬜ |
-| 7 | [Ferramentas de RE e debug](fase-7-ferramentas-re.md) | (contínua) fnprof, ganchos `PVR_*`, screenshot automático, REA/Ghidra | `fnprof.c`, `LARECOMP_*`, `sym.py`, `shot.sh` | ⬜ contínua |
-| 8 | [O aplicativo](fase-8-aplicativo.md) | launcher, menu overlay, resolução/FPS desbloqueados, recursos nossos | `ui/launcher.mm`, `menu.mm`, `hle/widescreen.c` | ⬜ |
+| 0 | [Aquisição e reconhecimento](fase-0-aquisicao.md) | dump extraído (base + update), inventário do executável, decisão de "vale/não vale" | dump do usuário + `nso.py`/`analyze.py` | ✅ base + v4.0.0 extraídos e verificados (gate dumps run_id=131ff828b2) |
+| 1 | [Recompilador](fase-1-recompilador.md) | todo o `main` vira C que **compila**; testes diferenciais verdes | `tools/gen.py`, `lifter.py`, `simd_c.py` | ✅ **M1** (pvgame.dll com 271k funções, linkada no boot run_id=990a33212b); **1.7 reaberto com prioridade**: função ausente em `7000cedb00` derruba a 1ª batalha |
+| 2 | [Runtime mínimo / boot headless](fase-2-runtime-boot.md) | o jogo roda `nn::init::Start` → `nnMain` e chega ao loop principal **sem gráficos** | `loader.c`, `kernel.c`, `dispatch.c`, `ipc.c`, `services/` | ✅ **M2** nas duas versões (v400 run_id=7adc0390c2, base run_id=db35401e31) |
+| 3 | [Sistema de arquivos e dados](fase-3-arquivos.md) | o jogo lê o romfs (base + patch) e os arquivos `trpfs` sozinho | `services/fs.c`, `romfs_build.c` | 🟢 na prática: o jogo carrega tudo do romfs; **save persistente** (fecha, reabre e carrega) — teste manual do [USER], 15/10 |
+| 4 | [Gráficos: NVN → Vulkan](fase-4-graficos.md) | **primeiro frame**: logo / tela de título renderizada | `runtime/nvn/*`, `maxwell/translate.c`, `vulkan/` | 🟢 **M3/M4** atingidos no teste manual (nota 95/100); faltam artefatos de iluminação, skybox com linhas, objetos não renderizados, gate `window` |
+| 5 | [Áudio, input, save, tempo](fase-5-sistemas.md) | controle funciona, som toca, save grava/carrega | `services/audio.c`, `hle/input.c`, `fs.c` (save) | 🟡 input e save ok; **áudio: silêncio total**; **teclado do nome (swkbd) ausente** |
+| 6 | [Jogável](fase-6-jogavel.md) | começar um jogo novo e andar pelo mapa aberto | ciclo shot.sh + correções | 🟡 **M5** e **M6 parcial** no teste manual (intro e começo da história, >10 min sem crash); bloqueios: **crash na 1ª batalha**, **5-10 fps (≈3 fps em área aberta)** |
+| 7 | [Ferramentas de RE e debug](fase-7-ferramentas-re.md) | (contínua) fnprof, ganchos `PVR_*`, screenshot automático, REA/Ghidra | `fnprof.c`, `LARECOMP_*`, `sym.py`, `shot.sh` | 🟢 contínua: kit `PVR_*`, `glsl_slice.py`, `run_auto.sh`, gates; **falta log/aviso de crash** |
+| 8 | [O aplicativo](fase-8-aplicativo.md) | launcher, menu overlay, resolução/FPS desbloqueados, recursos nossos | `ui/launcher.mm`, `menu.mm`, `hle/widescreen.c` | 🟡 nome **PSV Recomp**, `psvrecomp.ini`, `run_window.cmd` |
 | 9 | [Entender o jogo (estudo AAA)](fase-9-estudo-aaa.md) | documentação de motor, formatos, sistemas de jogo | (não existe no LAS: é o nosso objetivo de estudo) | ⬜ contínua |
 
 Ordem real: **0 → 1 → 2 → 3 → 4 → 5 → 6 → 8**, com **7 e 9 correndo em paralelo** desde a fase 1.
+
+## Estado e próximos passos (revisão com o [USER], 15/10/2026)
+
+**Alvo principal: v4.0.0** (com o update). A v1.0.0 segue só como build de comparação.
+
+Marcos: M0-M2 provados por gate. **M3, M4, M5** atingidos e **M6 parcial** pelo teste manual do [USER] (15/10): do
+logo até o começo da história, mais de 10 min sem crash, save persistente; o gate automático `window` fica como item
+próprio para formalizá-los.
+
+Ordem de trabalho:
+1. 🧠 **Crash da 1ª batalha** (1.7): `FATAL: no function at 7000cedb00 (lr=7000cedadc)` — salto indireto para um
+   endereço que o recompilador não reconheceu como função. Repro: carregar o save do [USER] → A na batalha.
+   Log: `lab/host-vk/crash_batalha_20261015.log`.
+2. 🧠 **Desempenho (6.6), com urgência logo depois:** 5-10 fps em interior, ≈3 fps em área aberta, CPU ~9 % e GPU
+   ociosa = gargalo de sincronização (~60 mil flushes CPU↔GPU por rodada). Meta: 30 fps em interior.
+3. 🧠 **Log e aviso de crash (7.x):** caixa de erro com a mensagem e o log salvo sozinho; hoje o jogo só fecha.
+4. **Visual:** skybox com linhas, artefatos de iluminação, objetos sem render. O [USER] indica o lugar e cria saves.
+5. **Áudio (5.1):** hoje silêncio total.
+6. **Teclado do nome (5.6, swkbd):** hoje o jogo usa um nome padrão (`?瑱?` na ficha).
+7. **Gate `window`:** screenshot automático no frame N para formalizar M3-M5.
 
 ## Marcos
 

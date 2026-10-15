@@ -21,6 +21,11 @@ chunks de ~1.500 funções → `clang -O1`. Testes: `test_lift.py`, `test_simd.p
 - [ ] 1.7 🤖 Relatório de jump tables: resolvidas / fallback "all labels" / `br` de dispatch. Meta: fallback < 1%.
 - [x] 1.8 🧠 `patches.py` vazio, com o mecanismo pronto (patch que confere a palavra original).
 
+## Estado em 15/10 (revisão com o [USER])
+- 🔴 **1.7 virou prioridade 1:** a 1ª batalha fecha o jogo com `FATAL: no function at 7000cedb00 (lr=7000cedadc)`
+  (`lab/host-vk/crash_batalha_20261015.log`): salto indireto para um endereço que o gerador não emitiu como função.
+  Caminho: achar a origem do salto (tabela, ponteiro de função, vtable) e incluir o alvo na descoberta de funções.
+
 ## Critério de saída (M1)
 `make gen && make` produz `pvgame.dll` sem erros; `test_lift.py` e `test_simd.py` verdes; relatório com
 nº de funções, % fallback, nº de `rt_udf` (cada um justificado).
