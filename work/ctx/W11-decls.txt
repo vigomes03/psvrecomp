@@ -1,0 +1,124 @@
+== bind_settings_load
+205:bool bind_settings_load(const char *key, const char *val) {
+53:bool bind_settings_load(const char *key, const char *val);
+   uses:
+== bind_settings_save
+221:void bind_settings_save(FILE *f) {
+54:void bind_settings_save(FILE *f);
+   uses:
+== escape_bottle_tint
+151:void escape_bottle_tint(int kind, const float *ui, uint32_t ui_size, float tint[8]) {
+   uses:
+1993:            extern void escape_bottle_tint(int kind, const float *ui, uint32_t ui_size, float tint[8]);
+1995:            escape_bottle_tint(bottle, (const float *)(uintptr_t)st.ubuf[0][u].addr, (uint32_t)st.ubuf[0][u].size, tint);
+== g_debug_frame_request
+78:volatile int g_debug_frame_request;  // F9: dump the next frame's passes (build/pass_*.png) + draw log
+   uses:
+550:    extern volatile int g_debug_frame_request;
+551:    if (g_debug_frame_request) { g_debug_frame_request = 0; debug_at = (long)total_frames + 1; }
+== g_heart_colours
+833:const char *const g_heart_colours[N_HEART_COLOURS] = {"Default", "Blue", "Green", "Purple", "Gold", "Orange", "Pink",
+56:extern const char *const g_heart_colours[N_HEART_COLOURS];
+833:const char *const g_heart_colours[N_HEART_COLOURS] = {"Default", "Blue", "Green", "Purple", "Gold", "Orange", "Pink",
+   uses:
+== g_tunic_colours
+826:const char *const g_tunic_colours[N_TUNIC_COLOURS] = {"Default", "Purple", "Orange", "Yellow", "Pink", "Teal", "Sky",
+55:extern const char *const g_tunic_colours[N_TUNIC_COLOURS];
+826:const char *const g_tunic_colours[N_TUNIC_COLOURS] = {"Default", "Purple", "Orange", "Yellow", "Pink", "Teal", "Sky",
+   uses:
+== game_level_name
+265:const char *game_level_name(void) {
+   uses:
+600:        extern const char *game_level_name(void);
+603:                frames / (now - last_fps_time), max_gap * 1000.0, game_level_name(), renderer_stats());
+== input_frame
+309:void input_frame(uint64_t frame) {
+   uses:
+530:    extern void input_frame(uint64_t frame);
+531:    input_frame(total_frames);
+== input_handle_event
+139:void input_handle_event(const SDL_Event *e) {
+22:void input_handle_event(const SDL_Event *e);
+22:void input_handle_event(const SDL_Event *e);
+   uses:
+692:            input_handle_event(&e);
+== pets_hide_item_cursor
+222:bool pets_hide_item_cursor(void) { return g_slot >= 0; }  // (renderer: the game's grid brackets go while on the card)
+   uses:
+1964:        extern bool pets_hide_item_cursor(void);
+1966:        if (pets_hide_item_cursor())
+== pot_glow_active
+103:bool pot_glow_active(void) {
+   uses:
+1976:        extern bool pot_glow_active(void);
+1977:        if (st.ubuf[0][2].addr && st.ubuf[0][2].size >= 48 && pot_glow_active())
+== pot_gold_tint
+27:void pot_gold_tint(float tint[8]);
+286:void pot_gold_tint(float tint[8]) {
+   uses:
+2183:            extern void pot_gold_tint(float tint[8]);
+2184:            if (run_gold[ri]) pot_gold_tint(rtint);
+== pot_instance_gold
+271:bool pot_instance_gold(const float *m) {
+   uses:
+2166:        extern bool pot_instance_gold(const float *m);
+2171:                bool g = pot_instance_gold(m + (size_t)(base_inst + i) * 16);
+== pot_level_active
+296:bool pot_level_active(void) {
+   uses:
+1817:        extern bool pot_level_active(void);
+1818:        if (last_hash == 0xa2177dbb72197bd9ull && pot_level_active()) { stat_skipped++; return; }
+== pot_tint
+128:bool pot_tint(const float *m, float tint[8], uint64_t mesh) {
+   uses:
+1975:        extern bool pot_tint(const float *m, float tint[8], uint64_t mesh);
+1978:            pot_tint((const float *)(uintptr_t)st.ubuf[0][2].addr, tint, st.vbuf[0].addr);
+== reboot_test_frame
+71:void reboot_test_frame(uint64_t frame) {
+   uses:
+539:    extern void reboot_test_frame(uint64_t frame);  // runtime/main.c (LARECOMP_REBOOT_AT)
+540:    reboot_test_frame(total_frames);
+== save_editor_frame
+   uses:
+541:    extern void save_editor_frame(uint64_t frame);
+542:    save_editor_frame(total_frames);
+== warp_frame
+151:void warp_frame(uint64_t frame) {
+   uses:
+537:    extern void warp_frame(uint64_t frame);
+538:    warp_frame(total_frames);
+== widescreen_allowed
+41:bool widescreen_allowed(void) { return g_allowed && g_settings.aspect == ASPECT_UNLOCKED && !ENV("LARECOMP_NO_WIDESCREEN"); }
+   uses:
+497:        extern bool widescreen_allowed(void);
+501:        output_scale(dw, dh, widescreen_allowed(), SDL_GetTicksNS() / 1e9, -1, &os);
+== widescreen_backdrop_seen
+105:void widescreen_backdrop_seen(uint64_t hash) {
+   uses:
+1821:        extern void widescreen_backdrop_seen(uint64_t hash);
+1822:        if (last_hash) widescreen_backdrop_seen(last_hash);
+== widescreen_effect_stretch
+22:float widescreen_effect_stretch(uint64_t fs_hash) {
+   uses:
+2043:        extern float widescreen_effect_stretch(uint64_t fs_hash);
+2044:        float k = widescreen_effect_stretch(g_cur_fs_hash);
+== widescreen_frame_end
+51:void widescreen_frame_end(uint64_t frame) {
+   uses:
+494:        extern void widescreen_frame_end(uint64_t frame);
+495:        widescreen_frame_end(total_frames);
+== widescreen_present_crop
+231:void widescreen_present_crop(uint64_t frame, double shape, float crop[4], double *vx, double *vy, double *vw, double *vh) {
+   uses:
+504:        extern void widescreen_present_crop(uint64_t, double, float *, double *, double *, double *, double *);
+506:        widescreen_present_crop(total_frames, shape, crop, &vx, &vy, &vw, &vh);
+== widescreen_scene_ubo
+146:void widescreen_scene_ubo(const float *u, uint64_t size) {
+   uses:
+1823:        extern void widescreen_scene_ubo(const float *u, uint64_t size);  // (the camera's view-projection)
+1824:        if (st.ubuf[0][5].addr) widescreen_scene_ubo((const float *)(uintptr_t)st.ubuf[0][5].addr, st.ubuf[0][5].size);
+== widescreen_set_factor
+15:void widescreen_set_factor(float f) { g_wide = f; }
+   uses:
+496:        extern void widescreen_set_factor(float f);
+507:        widescreen_set_factor((float)shape);
