@@ -193,6 +193,45 @@ static void *thread_main(void *arg) {
     return NULL;
 }
 
+// guest frame-pointer chain (x29) -> names (exported symbols only; f_<addr> otherwise)
+static void guest_backtrace(const Cpu *c, int max) {
+    for (uint64_t fp = c->x[29], lr = c->x[30], i = 0; (int)i < max && lr; i++) {
+        uint64_t off = 0;
+        const char *n = loader_symbol_at(lr, &off);
+        LOG("  guest #%llu %llx %s+%#llx\n", (unsigned long long)i, (unsigned long long)lr, n ? n : "?",
+            (unsigned long long)off);
+        if (fp < GUEST_LO || fp >= GUEST_HI || (fp & 7)) break;
+        lr = ((uint64_t *)(uintptr_t)fp)[1];
+        fp = ((uint64_t *)(uintptr_t)fp)[0];
+    }
+}
+
+static uint32_t *u32p(uint64_t a);
+// PVRecomp debug (PVR_DUMP_THREADS=1 at the time limit): every guest thread, its wait state and guest backtrace
+// (registers as of its last SVC, which is where a blocked thread sits). Racy reads: diagnostics only.
+void kernel_dump_threads(void) {
+    for (KThread *t = g_threads; t; t = t->anext) {
+        LOG("[threads] id %llu handle %x prio %d entry %llx %s wait_kind %d addr %llx tag %x\n",
+            (unsigned long long)t->id, t->handle, t->prio, (unsigned long long)t->entry,
+            t->finished ? "finished" : t->in_sync_wait ? "in WaitSynchronization" : "", (int)t->wait_kind,
+            (unsigned long long)t->wait_addr, t->wait_tag);
+        if (t->wait_kind == WAIT_MUTEX || t->wait_kind == WAIT_CONDVAR) {
+            uint64_t m = t->wait_kind == WAIT_MUTEX ? t->wait_addr : t->wait_mutex;
+            LOG("  mutex %llx = %08x\n", (unsigned long long)m, *u32p(m));
+        }
+        if (t->in_sync_wait)
+            LOG("  sync wait: %d handles at %llx\n", t->sync_count, (unsigned long long)t->sync_handles);
+        if (t->in_sync_wait && t->sync_count <= 64) {
+            const uint32_t *hs = (const uint32_t *)(uintptr_t)t->sync_handles;
+            for (int32_t i = 0; i < t->sync_count; i++) {
+                KObject *o = handle_get(hs[i]);
+                LOG("  waits on handle %x type %d signaled %d\n", hs[i], o ? (int)o->type : -1, o ? o->signaled : -1);
+            }
+        }
+        if (!t->finished) guest_backtrace(&t->cpu, 12);
+    }
+}
+
 static KThread *thread_new(uint64_t entry, uint64_t arg, uint64_t stack_top, int prio, int core) {
     KThread *t = calloc(1, sizeof *t);
     pthread_cond_init(&t->cond, NULL);
@@ -301,13 +340,21 @@ static uint32_t block_current(int64_t timeout_ns) {
             t->wait_result = R_CANCELLED;
             break;
         }
-        if (t->cancel) {
+        if (t->cancel && t->wait_kind == WAIT_ARBITER) {
+            // Only WaitSynchronization and the address arbiter observe svcCancelSynchronization. Mutex / condvar
+            // waits must leave the flag for the thread's next WaitSynchronization: nn::os MultiWait on user-mode
+            // events relies on it (PVRecomp: a mutex wait ate the cancel and the main thread slept forever in
+            // WaitSynchronizationN on 0 handles, v400 14/10).
             t->cancel = false;
             t->wait_kind = WAIT_NONE;
             t->wait_result = R_CANCELLED;
             break;
         }
         if (!kwait(timeout_ns, &ts)) {
+            // A waker may have handed us the object (e.g. mutex ownership) between the timeout and us retaking
+            // g_klock: then the wait succeeded. Overwriting it with R_TIMEOUT made nn::os re-Enter a mutex the
+            // thread already owned (PVRecomp, v400 hang 14/10).
+            if (t->wait_kind == WAIT_NONE) break;
             t->wait_kind = WAIT_NONE;
             t->wait_result = R_TIMEOUT;
             break;
@@ -350,14 +397,9 @@ static uint32_t svc_wait_process_wide_key(uint64_t mutex, uint64_t key, uint32_t
     t->wait_tag = tag;
     __atomic_store_n(u32p(key), 1, __ATOMIC_SEQ_CST);
     uint32_t r = block_current(timeout);
-    if (r != R_OK) {
-        // timed out / cancelled: still must reacquire the mutex
-        if (!mutex_acquire_or_mark(mutex, tag)) {
-            t->wait_kind = WAIT_MUTEX;
-            t->wait_addr = mutex;
-            block_current(-1);
-        }
-    }
+    // Timed out / cancelled: Horizon does NOT reacquire the mutex here; userland does (libnx condvarWaitTimeout,
+    // nn::os InternalConditionVariableImplByHorizon::TimedWait -> cs->Enter()). PVRecomp: the LAS kernel took it,
+    // so Violet's TimedWait then waited on a mutex it already owned (0x40000131 owned by 0x131): v400 hang 14/10.
     pthread_mutex_unlock(&g_klock);
     return r;
 }
@@ -480,6 +522,8 @@ static uint32_t svc_wait_synchronization(uint64_t handles_ptr, int32_t count, in
         if (t->cancel) { t->cancel = false; r = R_CANCELLED; goto out; }
         if (g_rt_unwind) { r = R_CANCELLED; goto out; }
         if (timeout == 0) { r = R_TIMEOUT; goto out; }
+        t->sync_handles = handles_ptr;
+        t->sync_count = count;
         t->in_sync_wait = true;
         t->snext = g_syncwaiters;
         g_syncwaiters = t;
@@ -728,16 +772,7 @@ static void svc_impl(Cpu *c, uint32_t imm, uint64_t pc) {
             LOG("[kernel] svcBreak result %#x = %04u-%04u (module %u, desc %u)\n", r, 2000 + (r & 0x1FF),
                 (r >> 9) & 0x1FFF, r & 0x1FF, (r >> 9) & 0x1FFF);
         }
-        // guest frame-pointer chain (x29) -> names (exported symbols only; f_<addr> otherwise)
-        for (uint64_t fp = c->x[29], lr = c->x[30], i = 0; i < 16 && lr; i++) {
-            uint64_t off = 0;
-            const char *n = loader_symbol_at(lr, &off);
-            LOG("  guest #%llu %llx %s+%#llx\n", (unsigned long long)i, (unsigned long long)lr, n ? n : "?",
-                (unsigned long long)off);
-            if (fp < GUEST_LO || fp >= GUEST_HI || (fp & 7)) break;
-            lr = ((uint64_t *)(uintptr_t)fp)[1];
-            fp = ((uint64_t *)(uintptr_t)fp)[0];
-        }
+        guest_backtrace(c, 16);
         FATAL("svcBreak(reason=%llx, info=%llx, size=%llx) at %llx\n", x[0], x[1], x[2], pc);
     case 0x27: debug_string(x[0], x[1]); x[0] = R_OK; break;
     case 0x29: {  // GetInfo(_, id0, handle, id1)
@@ -763,7 +798,12 @@ static void svc_impl(Cpu *c, uint32_t imm, uint64_t pc) {
         case 16: v = 0x1000000; break;  // SystemResourceSizeTotal != 0 -> nn::os VAMM enabled (SDK 13 allocator needs it)
         case 17: v = 0; break;
         case 18: v = 0x01006BB00C6F0000ull; break;
-        case 20: v = 0; break;
+        case 20: {  // UserExceptionContextAddress: a writable page (nn::os::SetDyingMessageRegion stores at +0x1c0)
+            static uint64_t ctx;
+            if (!ctx) ctx = (uint64_t)(uintptr_t)hle_alloc(0x1000);
+            v = ctx;
+            break;
+        }
         default: r = R_INVALID_ENUM; LOG("[kernel] GetInfo unknown id %u/%llu\n", id0, x[3]);
         }
         x[0] = r;

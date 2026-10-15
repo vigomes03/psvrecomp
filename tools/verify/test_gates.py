@@ -106,6 +106,13 @@ def main():
     expect(last == "init_sdk", f"boot stage parsed = {last}")
     expect(crash and "0x20" in crash, "crash parsed")
     expect(funcs == 227207, f"function count parsed = {funcs}")
+    idle = "[pvhost] running headless for 60 s\n[pvhost] time limit reached, exiting\n"
+    last, reached, *_ = gates.boot_stage(idle)
+    expect(not gates.stage_ok(last, reached, "frames_60"), "idle run (no frames) does NOT pass frames_60")
+    expect(gates.stage_ok(last, reached, "survived_time_limit"), "idle run passes survived_time_limit")
+    framed = "[nvn-null] present #1 (x)\n[nvn-null] present #64 (x)\n" + idle
+    last, reached, *_ = gates.boot_stage(framed)
+    expect(gates.stage_ok(last, reached, "frames_60"), "run with 64 frames passes frames_60")
     print(f"{'ALL OK' if not fails else f'{fails} FAILED'}")
     return 1 if fails else 0
 

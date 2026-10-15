@@ -1,5 +1,6 @@
 // Guest CPU state and helpers used by recompiled code.
 #pragma once
+#include <setjmp.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -33,6 +34,8 @@ typedef void (*GuestFn)(Cpu *);
 
 // ---- runtime services (runtime/*.c)
 void rt_dispatch(Cpu *c);                 // call function at c->pc
+jmp_buf *rt_jmp_slot(uint64_t env);              // guest setjmp sites: host checkpoint for this guest jmp_buf (setjmp.c)
+uint64_t rt_jmp_value(void);              // value the guest longjmp passed
 void rt_svc(Cpu *c, uint32_t imm, uint64_t pc);
 void rt_brk(Cpu *c, uint32_t imm, uint64_t pc) __attribute__((noreturn));
 void rt_udf(Cpu *c, uint64_t pc) __attribute__((noreturn));

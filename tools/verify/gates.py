@@ -38,6 +38,8 @@ STAGES = [
     ("init_main", r"^init main "),
     ("nnmain_started", r"^init main [\s\S]*?\[sm\] GetService"),  # the game itself asks for services
     ("romfs_read", r"\[fs\] romfs reads"),
+    ("frame_presented", r"^\[nvn-null\] present #1 "),  # first frame handed to (null) presentation
+    ("frames_60", r"^\[nvn-null\] present #64 "),
     ("nnmain_returned", r"nnMain returned"),
     ("survived_time_limit", r"time limit reached"),
 ]
@@ -165,6 +167,12 @@ def boot_stage(log):
         int(funcs.group(2)) if funcs else None
 
 
+def stage_ok(last, reached, need):
+    """The requested stage's OWN marker must be in the log, not just a later-ranked one. Ranking alone was a hole:
+    a run that idled to the time limit without presenting a frame ranked above frames_60 and passed it (14/10)."""
+    return last is not None and bool(reached.get(need)) and STAGE_NAMES.index(last) >= STAGE_NAMES.index(need)
+
+
 def g_boot(g, a):
     GENFULL, HOST = dirs(a)
     secs = a.seconds
@@ -182,8 +190,8 @@ def g_boot(g, a):
                   crash=crash, fatal=fatal, functions=funcs, log_lines=log.count("\n"),
                   log_tail=log.splitlines()[-12:])
     need = a.min_stage or "survived_time_limit"
-    g.check(f"reached stage >= {need}", last is not None and STAGE_NAMES.index(last) >= STAGE_NAMES.index(need),
-            f"reached {last}")
+    g.check(f"reached stage >= {need}", stage_ok(last, reached, need), f"reached {last}; {need} marker "
+            + ("present" if reached.get(need) else "ABSENT"))
     if need == "survived_time_limit":  # a partial-stage gate records the crash as info, not as a failed check
         g.check("no host exception", crash is None, crash or "")
 
@@ -202,7 +210,76 @@ def g_excl_pair(g, a):
     g.check("test_excl_pair exit 0", code == 0, f"exit {code}")
 
 
-GATES = {"dumps": g_dumps, "host": g_host, "link": g_link, "boot": g_boot, "simd": g_simd, "excl_pair": g_excl_pair}
+def g_nvn_null(g, a):
+    """Card W03: runtime/nvn/null_backend.c against recomp/test_null_backend.c (-Wall -Werror)."""
+    out = LAB / "w03"
+    out.mkdir(parents=True, exist_ok=True)
+    src = PD / "runtime" / "nvn" / "null_backend.c"
+    if not g.check("null_backend.c installed", src.exists(), src):
+        return
+    g.artifact(src)
+    exe, err = out / "test_null_backend.exe", out / "stderr.txt"
+    code, o = sh(f'export PATH="/d/msys64/ucrt64/bin:$PATH" TMP="$(cygpath -w "$LOCALAPPDATA")\\Temp" '
+                 f'TEMP="$(cygpath -w "$LOCALAPPDATA")\\Temp"; clang -Wall -Werror -O1 '
+                 f'-I"{mpath(PD / "runtime")}" -I"{mpath(PD / "runtime" / "nvn")}" "{mpath(RECOMP / "test_null_backend.c")}" '
+                 f'"{mpath(src)}" -o "{mpath(exe)}"')
+    g.out = o
+    if not g.check("compiles with -Wall -Werror", code == 0, o[-300:]):
+        return
+    code, o = sh(f'"{mpath(exe)}" 2> "{mpath(err)}"')
+    g.out += o
+    g.check("test exit 0 and prints W03 PASS", code == 0 and "W03 PASS" in o, o.strip()[-200:])
+    e = err.read_text(encoding="utf-8", errors="replace") if err.exists() else ""
+    nums = re.findall(r"^\[nvn-null\] present #(\d+) \(", e, re.M)
+    g.check("present logged for #1 #2 #4 only", nums == ["1", "2", "4"], nums)
+    g.check("init line logged once", e.count("[nvn-null] headless backend (no rendering)") == 1)
+
+
+def g_sdl_null(g, a):
+    """Card W04: runtime/platform/sdl_audio_null.h against recomp/test_sdl_audio_null.c, then audio.c compiles."""
+    out = LAB / "w04"
+    out.mkdir(parents=True, exist_ok=True)
+    hdr = PD / "runtime" / "platform" / "sdl_audio_null.h"
+    if not g.check("sdl_audio_null.h installed", hdr.exists(), hdr):
+        return
+    g.artifact(hdr)
+    env = ('export PATH="/d/msys64/ucrt64/bin:$PATH" TMP="$(cygpath -w "$LOCALAPPDATA")\\Temp" '
+           'TEMP="$(cygpath -w "$LOCALAPPDATA")\\Temp"; ')
+    exe = out / "test_sdl_audio_null.exe"
+    code, o = sh(env + f'clang -Wall -Werror -O1 -I"{mpath(hdr.parent)}" "{mpath(RECOMP / "test_sdl_audio_null.c")}" '
+                 f'-o "{mpath(exe)}" && "{mpath(exe)}"')
+    g.out = o
+    g.check("test compiles (-Wall -Werror) and prints W04 PASS", code == 0 and "W04 PASS" in o, o.strip()[-300:])
+    audio = PD / "runtime" / "services" / "audio.c"
+    if audio.exists():
+        code, o = sh(env + f'clang -O1 -fsyntax-only -D_POSIX_THREAD_SAFE_FUNCTIONS -I"{mpath(PD / "runtime")}" '
+                     f'"{mpath(audio)}"')
+        g.out += o
+        g.check("services/audio.c compiles with the shim", code == 0, o.strip()[-300:])
+
+
+def g_pl(g, a):
+    """Card W05: runtime/services/pl.c (pl:u shared fonts) against recomp/test_pl.c."""
+    out = LAB / "w05"
+    out.mkdir(parents=True, exist_ok=True)
+    src = PD / "runtime" / "services" / "pl.c"
+    if not g.check("services/pl.c installed", src.exists(), src):
+        return
+    g.artifact(src)
+    env = ('export PATH="/d/msys64/ucrt64/bin:$PATH" TMP="$(cygpath -w "$LOCALAPPDATA")\\Temp" '
+           'TEMP="$(cygpath -w "$LOCALAPPDATA")\\Temp"; ')
+    exe = out / "test_pl.exe"
+    code, o = sh(env + f'clang -Wall -O1 -D_POSIX_THREAD_SAFE_FUNCTIONS -I"{mpath(PD / "runtime")}" '
+                 f'"{mpath(RECOMP / "test_pl.c")}" -o "{mpath(exe)}"')
+    g.out = o
+    if not g.check("test compiles", code == 0, o.strip()[-400:]):
+        return
+    code, o = sh(f'"{mpath(exe)}" "{mpath(out)}"')
+    g.out += o
+    g.check("test prints W05 PASS", code == 0 and "W05 PASS" in o, o.strip()[-400:])
+
+
+GATES = {"dumps": g_dumps, "host": g_host, "link": g_link, "boot": g_boot, "simd": g_simd, "excl_pair": g_excl_pair, "nvn_null": g_nvn_null, "sdl_null": g_sdl_null, "pl": g_pl}
 
 
 def run_gate(name, a):

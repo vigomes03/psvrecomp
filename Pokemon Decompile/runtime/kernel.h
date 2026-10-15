@@ -26,6 +26,8 @@ struct KThread {
     uint32_t handle;
     int prio, core;
     bool cancel, in_sync_wait;
+    uint64_t sync_handles;  // WaitSynchronization arguments while in_sync_wait (thread dump)
+    int32_t sync_count;
     // wait state (protected by g_klock)
     WaitKind wait_kind;
     uint64_t wait_addr, wait_mutex;

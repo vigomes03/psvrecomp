@@ -83,6 +83,7 @@ int main(int argc, char **argv) {
     loader_load(exefs);
     kernel_init();
     dispatch_init();
+    { extern void setjmp_install(void); setjmp_install(); }  // guest longjmp -> host checkpoint (setjmp.c)
 
     uint32_t stack_size = 0x100000;
     int prio = 44;
@@ -113,6 +114,7 @@ int main(int argc, char **argv) {
     LOG("[pvhost] running headless for %d s\n", secs);
     Sleep((DWORD)secs * 1000);
     LOG("[pvhost] time limit reached, exiting\n");
+    if (getenv("PVR_DUMP_THREADS")) { extern void kernel_dump_threads(void); kernel_dump_threads(); }
     plat_terminate();
     return 0;
 }

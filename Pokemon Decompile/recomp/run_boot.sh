@@ -15,5 +15,5 @@ echo "\"$H/pvgame_entry.o\"" >> "$H/objs.rsp"
 rm -f "$H/pvgame.dll"
 clang -shared -fuse-ld=lld -Wl,-Map,"$H/pvgame.map" -o "$H/pvgame.dll" @"$H/objs.rsp" "$H/pvhost.dll.a" || exit 1
 echo "pvgame.dll linked ($(du -h "$H/pvgame.dll" | cut -f1), $VER); running ${SECS}s headless..."
-cd "$H" && PVR_RUN_SECONDS=$SECS ./pvhost.exe "$EXEFS" "$ROMFS" > boot.log 2>&1
+cd "$H" && PVR_SYSFONT_DIR="${PVR_SYSFONT_DIR:-D:/Dev/REA/lab/sysfont}" PVR_RUN_SECONDS=$SECS ./pvhost.exe "$EXEFS" "$ROMFS" > boot.log 2>&1
 echo "exit=$?  log lines: $(wc -l < boot.log)"

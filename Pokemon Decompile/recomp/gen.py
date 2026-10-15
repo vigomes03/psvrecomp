@@ -50,6 +50,31 @@ class Module:
         self.cache = {}
         self.stats = Counter()
         self.mu = None
+        self.setjmp_targets = self._find_setjmp_targets()
+
+    def _find_setjmp_targets(self):
+        """Addresses a `bl` reaches setjmp through: the module's own setjmp symbols and its PLT stubs bound to them.
+
+        PVRecomp: a guest longjmp returns to the instruction after `bl setjmp`, which is not a function entry. The
+        caller therefore takes a host checkpoint (CRT setjmp: SEH unwind on longjmp) right at that call; the runtime's longjmp HLE
+        restores the guest registers from the jmp_buf and jumps back to it (runtime/setjmp.c).
+        """
+        names = {'setjmp', '_setjmp', 'sigsetjmp', '__sigsetjmp'}
+        n, out = self.nso, set()
+        for name, info, shndx, value, size in n.syms:
+            if shndx and name in names:
+                out.add(self.base + value)
+        got = {off for off, typ, sym, add in n.relocs if typ == 1026 and sym and n.syms[sym][0] in names}
+        if got:
+            for i in range(len(self.words) - 1):
+                w0, w1 = self.words[i], self.words[i + 1]
+                if (w0 & 0x9F00001F) != 0x90000010 or (w1 & 0xFFC003FF) != 0xF9400211:  # adrp x16 / ldr x17,[x16,#]
+                    continue
+                pc = self.lo + 4 * i
+                page = (pc & ~0xFFF) + ((((w0 >> 5) & 0x7FFFF) << 2 | (w0 >> 29) & 3) << 12)
+                if page + ((w1 >> 10) & 0xFFF) * 8 - self.base in got:
+                    out.add(pc)
+        return out
 
     def in_text(self, a):
         return self.lo <= a < self.hi and a % 4 == 0
@@ -396,6 +421,9 @@ class Module:
             if a in labels:
                 flush()
                 out.append(f'L_{a:x}:;')
+            if PC_LINES:  # debug: C line number = guest offset in the module -> addr2line maps host pc to guest pc
+                flush()
+                out.append(f'#line {a - self.base} "{self.name}"')
             if a - self.base in RANDO_CODE:  # randomizer patch site: the active seed picks the instruction
                 flush()
                 out.append(f'    {{ extern uint32_t rando_word(uint64_t); uint32_t rw = rando_word({hx(a)});')
@@ -436,9 +464,14 @@ class Module:
                 t = ins.target
                 if self.in_text(t):
                     refs.add(t)
-                    out.append(f'    c->x[30] = {hx(a + 4)}; {fname(t)}(c);')
+                    call = f'c->x[30] = {hx(a + 4)}; {fname(t)}(c);'
                 else:
-                    out.append(f'    c->x[30] = {hx(a + 4)}; c->pc = {hx(t)}; rt_dispatch(c);')
+                    call = f'c->x[30] = {hx(a + 4)}; c->pc = {hx(t)}; rt_dispatch(c);'
+                if t in self.setjmp_targets:  # longjmp comes back here: see _find_setjmp_targets
+                    out.append(f'    if (setjmp(*rt_jmp_slot(c->x[0]))) c->x[0] = rt_jmp_value(); else {{ {call} }}')
+                    self.stats['setjmp_sites'] += 1
+                else:
+                    out.append(f'    {call}')
             elif k == 'blr':
                 out.append(f'    c->pc = {ins.target}; c->x[30] = {hx(a + 4)}; rt_dispatch(c);')
             elif k == 'br':
@@ -476,6 +509,9 @@ from patches import PATCHES
 import json as _json
 import os as _os
 _rv = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'rando', 'patch_variants.json')
+# PVR_GEN_PCLINES=1: emit `#line <guest offset> "<module>"` before every instruction (debug builds only).
+PC_LINES = bool(os.environ.get('PVR_GEN_PCLINES'))
+
 RANDO_CODE = {}
 if _os.path.exists(_rv):
     for _a, _ws in _json.load(open(_rv))['code'].items():
@@ -599,7 +635,7 @@ def main():
                 lines = m.emit_function(a, end, labels, tables, hle)
                 r = getattr(m, '_refs', set())
                 m._refs = set()
-            n = sum(len(l) + 1 for l in lines)
+            n = sum(len(l) + 1 for l in lines if not l.startswith('#line '))  # (same chunks with/without PC_LINES)
             if n > args.big_fn and fns:  # (a big function gets a file of its own: they compile in parallel)
                 pending = (a, lines, r)
                 break

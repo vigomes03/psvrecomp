@@ -18,16 +18,41 @@
   vira cartão: semântica tirada do Switchbrew + leitura do Eden `src/core/hle/kernel`).
 - [ ] 2.4 🤖 Serviços IPC: um cartão por serviço novo (lista da fase 0). Online (`nifm`, `friends`, `bcat`, `npns`,
   `prepo`, `ssl`, `nsd`...) → **stub "sem rede"**. Critério: o jogo segue sem erro fatal.
+  Feitos em 14/10: `pl:u` (fontes compartilhadas, cartão W05, gate pl run_id=c25dcb8f3b), `csrng`, `btm:u` + `IBtmUserCore`.
 - [ ] 2.5 🧠 Threads: o Pokémon cria muitas. Validar `ArbitrateLock/Unlock`, `WaitProcessWideKey`,
   `WaitForAddress/SignalToAddress` sob carga (teste de estresse próprio).
-- [ ] 2.6 🧠 NVN/áudio em modo stub (registra o nome, devolve sucesso/handles falsos).
+  Corrigidos em 14/10, todos herdados do kernel do LAS e diferentes do Horizon:
+  (a) no timeout, `WaitProcessWideKeyAtomic` NÃO readquire o mutex (quem readquire é o nn::os/libnx);
+  (b) `block_current` sobrescrevia com timeout um wake que chegou junto; (c) mutex/condvar consumiam o
+  `CancelSynchronization` destinado ao próximo `WaitSynchronization`. **Ainda aberto:** o boot trava
+  de forma intermitente entre 16 e 512 frames, nas duas versões; a thread principal fica em `WaitAny` com 0 handles.
+  Para investigar, use `PVR_DUMP_THREADS=1`.
+- [x] 2.6 🧠 NVN/áudio em modo stub: backend NVN nulo (W03, gate nvn_null run_id=2c624c489d) + SDL de áudio nulo
+  (W04, gate sdl_null run_id=7bcb24a69b). Boot com frames: base run_id=6c576b773b (`present #64`) e
+  v400 run_id=e796f17e2a (`frame_presented`).
 - [ ] 2.7 🤖 Log estruturado de boot: sequência de SVCs/IPC; comparar com o log do Eden rodando o mesmo dump.
 
-## Estado (14/10)
-Boot real, v1.0.0 (run_id=6ea004c868) e v4.0.0 (run_id=e56d4aa1d1): os 3 módulos carregam, os ~2.100 construtores
-do `main` rodam, o `nnMain` abre `time:u`/`hid`/`fsp-srv`, lê o romfs (`dumps/<v>/romfs.bin`) e cria ~12 threads.
-Para no `NvOsDrvOpen` (a NVN do SDK tenta abrir o driver da GPU via `nvdrv`): é a tarefa 2.6.
-Foi preciso: TIPC no IPC (o `sm:` do SDK 13 não usa mais CMIF) e a ordem dos DT_INIT acima.
+## Estado (14/10, fim do dia)
+Nas duas versões o boot chega a apresentar frames pelo backend NVN nulo: base `present #64` (run_id=6c576b773b) e v400
+`frame_presented` (run_id=e796f17e2a). O ponto de parada varia de 16 a 512 frames (ver 2.5).
+O que foi preciso:
+- **setjmp/longjmp do guest.** O código recompilado chama funções como C, e o `longjmp` volta para o meio de
+  uma função. Agora o `gen.py` gera um checkpoint (`setjmp` do CRT) em cada `bl setjmp`, e o `runtime/setjmp.c`
+  faz a HLE do `longjmp`. O `__builtin_setjmp` do clang não serve no Win64 (restaura o rbp errado).
+- **`SamplerBuilder` compactado.** Cabe nos 0x40 bytes que o jogo reserva na pilha; antes, `SetBorderColor` sobrescrevia x29/x30.
+- **`GetInfo(20)`** (UserExceptionContextAddress) passou a devolver uma página válida.
+- **`HOST()` da NVN** passou a aceitar NULL (`BindProgram(cb, NULL)`).
+
+Ferramentas novas:
+- `recomp/disas.py`;
+- `recomp/regen_changed.sh` (regera e recompila só os chunks que mudaram);
+- `PVR_GEN_PCLINES=1` (`#line` com o PC do guest, para o addr2line);
+- `PVR_TRACE_HLE=1`;
+- `PVR_DUMP_THREADS=1`.
+
+Critério M2 (60 s de `present` sem FATAL): **ainda não**. O gate `frames_60` passa só às vezes.
+Atenção: até 14/10, `frames_60` passava sem nenhum frame quando o jogo só sobrevivia até o limite de tempo. O
+`stage_ok` do gates.py corrige isso e tem teste.
 
 ## Critério de saída (M2)
 Log mostra: módulos carregados → `nnMain` → N threads → serviços abertos → loop chamando `nvnQueuePresentTexture`

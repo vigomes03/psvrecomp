@@ -144,6 +144,11 @@ static GuestFn dispatch_slow(Cpu *c) {
         rt_unwind_point();  // (HLE calls aren't cached below, so every one passes here: a reboot's safe point)
         int i = (int)((pc - HLE_BASE) / 16);
         if (i < hle_count) {
+            static int trace = -1;  // PVR_TRACE_HLE=1: log every host-implemented call (name, guest lr, x0, x1)
+            if (trace < 0) trace = getenv("PVR_TRACE_HLE") != NULL;
+            if (trace)
+                LOG("[hle-call] %s lr=%llx x0=%llx x1=%llx\n", hle_slots[i].name, (unsigned long long)c->x[30],
+                    (unsigned long long)c->x[0], (unsigned long long)c->x[1]);
             if (hle_slots[i].fn) return hle_slots[i].fn;
             unimpl_pc = pc;
             return hle_unimplemented;
