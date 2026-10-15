@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include "hle.h"
+#include "regions.h"
 #include "kernel.h"
 
 // ------------------------------------------------------------------ results
@@ -102,45 +103,36 @@ static bool kwait(int64_t timeout_ns, const struct timespec *ts) {
 }
 
 // ------------------------------------------------------------------ memory map
-typedef struct { uint64_t addr, size; uint32_t type, perm; } Region;
-static Region regions[1024];
-static int nregions;
+// The map itself is an interval map in regions.c (card W08): overlapping maps overwrite, unmaps carve out
+// partial ranges, neighbours merge. PVRecomp: the LAS list (exact-start keys, 1024 entries) hit "too many regions"
+// with the SDK 13 VAMM (base boot 14/10).
 static uint64_t heap_size;
 static uint64_t tls_next = TLS_BASE;
 uint64_t kernel_heap_size(void) { return heap_size; }  // bytes from HEAP_BASE set by SetHeapSize
 // Writable guest data regions (heap, mapped/physical memory, module .data): for debug/runtime memory scans.
 int kernel_data_regions(uint64_t *addr, uint64_t *size, int max) {
     int n = 0;
-    for (int i = 0; i < nregions && n < max; i++)
-        if ((regions[i].perm & 2) && regions[i].type != 0xB && regions[i].type != 0xC) {
-            addr[n] = regions[i].addr; size[n] = regions[i].size; n++;
+    for (int i = 0; i < regions_count() && n < max; i++) {
+        const Region *r = regions_at(i);
+        if ((r->perm & 2) && r->type != 0xB && r->type != 0xC) {
+            addr[n] = r->addr; size[n] = r->size; n++;
         }
+    }
     return n;
 }
 
 static void region_add(uint64_t addr, uint64_t size, uint32_t type, uint32_t perm) {
-    if (nregions == 1024) FATAL("too many regions\n");
     plat_commit(addr, size);  // back it before the OS writes there (Windows: file reads into the heap)
-    int i = nregions++;
-    while (i > 0 && regions[i - 1].addr > addr) { regions[i] = regions[i - 1]; i--; }
-    regions[i] = (Region){addr, size, type, perm};
+    if (regions_set(addr, size, type, perm) != 0) FATAL("too many regions (%d)\n", regions_count());
 }
 
-static void region_remove(uint64_t addr) {
-    for (int i = 0; i < nregions; i++) {
-        if (regions[i].addr == addr) {
-            memmove(&regions[i], &regions[i + 1], (nregions - i - 1) * sizeof(Region));
-            nregions--;
-            return;
-        }
-    }
-}
+static void region_remove(uint64_t addr, uint64_t size) { regions_clear(addr, size); }
 
 static void query_memory(uint64_t addr, uint64_t out) {
     uint64_t prev_end = 0;
     uint64_t info[5] = {0};  // addr, size, type|attr<<32, perm|ipc<<32, device|pad<<32
-    for (int i = 0; i < nregions; i++) {
-        Region *r = &regions[i];
+    for (int i = 0; i < regions_count(); i++) {
+        const Region *r = regions_at(i);
         if (addr >= r->addr && addr < r->addr + r->size) {
             info[0] = r->addr;
             info[1] = r->size;
@@ -387,19 +379,25 @@ static uint32_t svc_arbitrate_unlock(uint64_t addr) {
     return R_OK;
 }
 
-static uint32_t svc_wait_process_wide_key(uint64_t mutex, uint64_t key, uint32_t tag, int64_t timeout) {
+static uint32_t svc_wait_process_wide_key(uint64_t mutex, uint64_t key, uint32_t tag,
+int64_t timeout) {
     pthread_mutex_lock(&g_klock);
     KThread *t = t_cur;
+    // Write the key BEFORE releasing the mutex to prevent lost wakeups.
+    // The guest Signal (0x700537f9dc) does "cbz w8, ret" and only calls kernel if key != 0.
+    // PVRecomp v400 hang 14/10: another thread could acquire mutex, change state, call Signal, see key=0, return.
+    __atomic_store_n(u32p(key), 1, __ATOMIC_SEQ_CST);
     mutex_release(mutex);
+    if (timeout == 0) {
+        pthread_mutex_unlock(&g_klock);
+        return R_TIMEOUT;
+    }
     t->wait_kind = WAIT_CONDVAR;
     t->wait_addr = key;
     t->wait_mutex = mutex;
     t->wait_tag = tag;
-    __atomic_store_n(u32p(key), 1, __ATOMIC_SEQ_CST);
     uint32_t r = block_current(timeout);
-    // Timed out / cancelled: Horizon does NOT reacquire the mutex here; userland does (libnx condvarWaitTimeout,
-    // nn::os InternalConditionVariableImplByHorizon::TimedWait -> cs->Enter()). PVRecomp: the LAS kernel took it,
-    // so Violet's TimedWait then waited on a mutex it already owned (0x40000131 owned by 0x131): v400 hang 14/10.
+    // Timed out / cancelled: Horizon does NOT reacquire the mutex here; userland does.
     pthread_mutex_unlock(&g_klock);
     return r;
 }
@@ -607,8 +605,8 @@ static void svc_impl(Cpu *c, uint32_t imm, uint64_t pc) {
     case 0x01: {  // SetHeapSize
         uint64_t size = x[1];
         if (size > HEAP_MAX) { x[0] = R_OUT_OF_RESOURCE; break; }
+        region_remove(HEAP_BASE, heap_size);
         heap_size = size;
-        region_remove(HEAP_BASE);
         if (size) region_add(HEAP_BASE, size, 5, 3);
         x[0] = R_OK;
         x[1] = HEAP_BASE;
@@ -622,7 +620,7 @@ static void svc_impl(Cpu *c, uint32_t imm, uint64_t pc) {
         break;
     case 0x05:  // UnmapMemory(dst, src, size): copy back
         memcpy((void *)x[1], (void *)x[0], x[2]);
-        region_remove(x[0]);
+        region_remove(x[0], x[2]);
         x[0] = R_OK;
         break;
     case 0x06:  // QueryMemory(out_info, _, addr)
@@ -706,7 +704,7 @@ static void svc_impl(Cpu *c, uint32_t imm, uint64_t pc) {
         x[0] = R_OK;
         break;
     }
-    case 0x14: region_remove(x[1]); x[0] = R_OK; break;  // UnmapSharedMemory
+    case 0x14: region_remove(x[1], x[2]); x[0] = R_OK; break;  // UnmapSharedMemory(handle, addr, size)
     case 0x15: {  // CreateTransferMemory(_, addr, size, perm)
         KTransferMem *t = calloc(1, sizeof *t);
         t->obj.type = KOBJ_TMEM;
@@ -819,7 +817,7 @@ static void svc_impl(Cpu *c, uint32_t imm, uint64_t pc) {
         break;
     case 0x2D:  // UnmapPhysicalMemory(addr, size)
         plat_reset_guest(x[0], x[0] + x[1]);
-        region_remove(x[0]);
+        region_remove(x[0], x[1]);
         x[0] = R_OK;
         break;
     case 0x34: x[0] = svc_wait_for_address(x[0], (uint32_t)x[1], (int32_t)x[2], (int64_t)x[3]); break;
@@ -882,7 +880,7 @@ void kernel_reset(void) {
     g_waitlist = NULL;
     g_syncwaiters = NULL;
     memset(handles, 0, sizeof handles);
-    nregions = 0;
+    regions_reset();
     heap_size = 0;
     tls_next = TLS_BASE;
     next_thread_id = 0x50;

@@ -27,6 +27,13 @@
   `CancelSynchronization` destinado ao próximo `WaitSynchronization`. **Ainda aberto:** o boot trava
   de forma intermitente entre 16 e 512 frames, nas duas versões; a thread principal fica em `WaitAny` com 0 handles.
   Para investigar, use `PVR_DUMP_THREADS=1`.
+  **Resolvido em 14/10 (qwen, cartões com referências):**
+  - W06 (d): a key do condvar agora é gravada ANTES de liberar o mutex. O `Signal` do nn::os só chama o kernel se
+    key ≠ 0. Referência: Eden `k_condition_variable.cpp` Wait. host v400 run_id=8574b2a012.
+  - W07: comandos NVN grandes são divididos em pedaços que cabem nos chunks de 1024 B do jogo.
+    gate cmdbuf_split run_id=dd87dec48f.
+  - W08: o mapa de memória virou um mapa de intervalos (split/merge). A lista antiga estourava em
+    "too many regions" com a VAMM. gate regions run_id=4054feb2b8.
 - [x] 2.6 🧠 NVN/áudio em modo stub: backend NVN nulo (W03, gate nvn_null run_id=2c624c489d) + SDL de áudio nulo
   (W04, gate sdl_null run_id=7bcb24a69b). Boot com frames: base run_id=6c576b773b (`present #64`) e
   v400 run_id=e796f17e2a (`frame_presented`).
@@ -50,7 +57,10 @@ Ferramentas novas:
 - `PVR_TRACE_HLE=1`;
 - `PVR_DUMP_THREADS=1`.
 
-Critério M2 (60 s de `present` sem FATAL): **ainda não**. O gate `frames_60` passa só às vezes.
+Critério M2 (60 s de `present` sem FATAL), medido com `--min-stage frames_60,survived_time_limit --repeat 4`:
+- **base v1.0.0: atingido, 4 de 4** (`present #1024` em cada uma), run_id=977d5ee1c3;
+- **v4.0.0: 3 de 4** (run_id=1e0e69e1fc FAIL). A rodada 2 caiu com `c0000005 accessing 0x58` dentro do código do
+  jogo (main 0x700160be6c, chamado de 0x7000d2ff7c), depois de 512 frames. É o próximo item de estudo.
 Atenção: até 14/10, `frames_60` passava sem nenhum frame quando o jogo só sobrevivia até o limite de tempo. O
 `stage_ok` do gates.py corrige isso e tem teste.
 

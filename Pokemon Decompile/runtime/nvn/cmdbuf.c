@@ -426,8 +426,43 @@ NVN(nvnCommandBufferDownsampleTextureView) {
 NVN(nvnCommandBufferTiledDownsample) { (void)c; }
 NVN(nvnCommandBufferTiledDownsampleTextureView) { (void)c; }
 NVN(nvnCommandBufferResolveDepthBuffer) { (void)c; }
-// UpdateUniformBuffer(cmd, buffer, size, offset, dataSize, data)
-NVN(nvnCommandBufferUpdateUniformBuffer) { record_copy(c, CMD_UPDATE_UNIFORM_BUFFER, 5, (uint32_t)A(4)); }
+#define PIECE_BYTES 512u
+
+static void record_copy_split(Cpu *c, uint32_t op, int count_arg, int ptr_arg, uint32_t unit,
+   uint32_t max_units, int offset_arg) {
+    Snap s = snap(c);
+    uint32_t total_units = s.x[count_arg];
+    uint64_t data_ptr = s.x[ptr_arg];
+    uint32_t done = 0;
+    
+    if (total_units == 0) {
+        // Handle zero-length case: record ONE record with 0 bytes
+        Snap p = s;
+        p.x[count_arg] = 0;
+        record(c, op, 0, &p);
+        return;
+    }
+    
+    while (done < total_units) {
+        uint32_t n = total_units - done;
+        if (n > max_units) n = max_units;
+        
+        Snap p = s;
+        p.x[count_arg] = n;
+        p.x[ptr_arg] = data_ptr + done * unit;
+        if (offset_arg >= 0) {
+            p.x[offset_arg] = s.x[offset_arg] + done * unit;
+        }
+        
+        CmdRec *r = record(c, op, n * unit, &p);
+        memcpy(r->extra, (const uint8_t *)(uintptr_t)data_ptr + done * unit, n * unit);
+        done += n;
+    }
+}
+
+NVN(nvnCommandBufferUpdateUniformBuffer) {
+    record_copy_split(c, CMD_UPDATE_UNIFORM_BUFFER, 4, 5, 1, PIECE_BYTES, 3);
+}
 
 // ---- synchronization and misc
 NVN(nvnCommandBufferFenceSync) {
@@ -442,8 +477,12 @@ PLAIN(nvnCommandBufferWaitEvent, CMD_WAIT_EVENT)
 PLAIN(nvnCommandBufferReportCounter, CMD_REPORT_COUNTER)
 NVN(nvnCommandBufferReportValue) { (void)c; }
 NVN(nvnCommandBufferResetCounter) { (void)c; }
-NVN(nvnCommandBufferCallCommands) { record_copy(c, CMD_CALL, 2, (uint32_t)A(1) * 8); }
-NVN(nvnCommandBufferCopyCommands) { record_copy(c, CMD_CALL, 2, (uint32_t)A(1) * 8); }
+NVN(nvnCommandBufferCallCommands) {
+    record_copy_split(c, CMD_CALL, 1, 2, 8, PIECE_BYTES / 8, -1);
+}
+NVN(nvnCommandBufferCopyCommands) {
+    record_copy_split(c, CMD_CALL, 1, 2, 8, PIECE_BYTES / 8, -1);
+}
 NVN(nvnCommandBufferInsertDebugMarker) { (void)c; }
 NVN(nvnCommandBufferInsertDebugMarkerDynamic) { (void)c; }
 NVN(nvnCommandBufferInsertDebugMarkerStatic) { (void)c; }

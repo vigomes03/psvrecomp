@@ -71,6 +71,11 @@ def mpath(p):  # Windows path with forward slashes for bash/clang
     return str(p).replace("\\", "/")
 
 
+# PATH with the MSYS2 toolchain + a Windows TMP for clang (bash snippet prefix)
+ENV_MSYS = r'export PATH="/d/msys64/ucrt64/bin:$PATH" TMP="$(cygpath -w "$LOCALAPPDATA")\\Temp" ' \
+           r'TEMP="$(cygpath -w "$LOCALAPPDATA")\\Temp"; '
+
+
 def bpath(p):  # MSYS path for bash scripts that call cygpath
     s = mpath(p)
     return "/" + s[0].lower() + s[2:] if re.match(r"^[A-Za-z]:/", s) else s
@@ -174,26 +179,43 @@ def stage_ok(last, reached, need):
 
 
 def g_boot(g, a):
+    """Boot headless; with --repeat N every one of N runs must reach the stage (boots are nondeterministic: threads)."""
     GENFULL, HOST = dirs(a)
     secs = a.seconds
-    (HOST / "boot.log").unlink(missing_ok=True)
-    code, out = sh(f'bash run_boot.sh "{bpath(GENFULL)}" "{bpath(HOST)}" {secs} {a.version}', cwd=RECOMP,
-                   timeout=secs + 3600)
-    g.out = out
-    log_p = HOST / "boot.log"
-    if not g.check("boot.log written by this run", log_p.exists()):
-        return
-    g.artifact(log_p)
-    log = log_p.read_text(encoding="utf-8", errors="replace")
-    last, reached, crash, fatal, funcs = boot_stage(log)
-    g.info.update(stage=last, stage_index=STAGE_NAMES.index(last) if last else -1, reached=reached,
-                  crash=crash, fatal=fatal, functions=funcs, log_lines=log.count("\n"),
-                  log_tail=log.splitlines()[-12:])
-    need = a.min_stage or "survived_time_limit"
-    g.check(f"reached stage >= {need}", stage_ok(last, reached, need), f"reached {last}; {need} marker "
-            + ("present" if reached.get(need) else "ABSENT"))
-    if need == "survived_time_limit":  # a partial-stage gate records the crash as info, not as a failed check
-        g.check("no host exception", crash is None, crash or "")
+    n = max(1, a.repeat)
+    stages = []
+    for i in range(n):
+        (HOST / "boot.log").unlink(missing_ok=True)
+        code, out = sh(f'bash run_boot.sh "{bpath(GENFULL)}" "{bpath(HOST)}" {secs} {a.version}', cwd=RECOMP,
+                       timeout=secs + 3600)
+        g.out += out
+        log_p = HOST / "boot.log"
+        tag = f"run {i + 1}/{n}: " if n > 1 else ""
+        if not g.check(f"{tag}boot.log written by this run", log_p.exists()):
+            return
+        if n > 1:  # keep every run's log as evidence
+            kept = HOST / f"boot_run{i + 1}.log"
+            kept.write_bytes(log_p.read_bytes())
+            g.artifact(kept)
+        else:
+            g.artifact(log_p)
+        log = log_p.read_text(encoding="utf-8", errors="replace")
+        last, reached, crash, fatal, funcs = boot_stage(log)
+        stages.append(last)
+        g.info.update(stage=last, stage_index=STAGE_NAMES.index(last) if last else -1, reached=reached,
+                      crash=crash, fatal=fatal, functions=funcs, log_lines=log.count("\n"),
+                      log_tail=log.splitlines()[-12:])
+        needs = (a.min_stage or "survived_time_limit").split(",")  # comma list: every stage must be reached
+        for need in needs:
+            if need not in STAGE_NAMES:
+                raise SystemExit(f"unknown stage {need!r}; stages: {STAGE_NAMES}")
+            g.check(f"{tag}reached stage >= {need}", stage_ok(last, reached, need), f"reached {last}; {need} marker "
+                    + ("present" if reached.get(need) else "ABSENT") + (f"; {fatal}" if fatal else ""))
+        if "survived_time_limit" in needs:  # a partial-stage gate records the crash as info, not as a failed check
+            g.check(f"{tag}no host exception", crash is None, crash or "")
+            g.check(f"{tag}no FATAL", fatal is None, fatal or "")
+    if n > 1:
+        g.info.update(stages=stages, repeat=n)
 
 
 def g_simd(g, a):
@@ -279,7 +301,46 @@ def g_pl(g, a):
     g.check("test prints W05 PASS", code == 0 and "W05 PASS" in o, o.strip()[-400:])
 
 
-GATES = {"dumps": g_dumps, "host": g_host, "link": g_link, "boot": g_boot, "simd": g_simd, "excl_pair": g_excl_pair, "nvn_null": g_nvn_null, "sdl_null": g_sdl_null, "pl": g_pl}
+def g_cmdbuf_split(g, a):
+    """Card W07: runtime/nvn/cmdbuf.c splits big commands across 1024-byte chunks (recomp/test_cmdbuf_split.c)."""
+    out = LAB / "w07"
+    out.mkdir(parents=True, exist_ok=True)
+    src = PD / "runtime" / "nvn" / "cmdbuf.c"
+    g.artifact(src)
+    env = ENV_MSYS
+    exe = out / "test_cmdbuf_split.exe"
+    exe.unlink(missing_ok=True)
+    code, o = sh(env + f'clang -Wall -Werror -O1 -march=x86-64-v3 -I"{mpath(PD / "runtime")}" '
+                 f'-I"{mpath(PD / "runtime" / "nvn")}" "{mpath(RECOMP / "test_cmdbuf_split.c")}" -o "{mpath(exe)}"')
+    g.out = o
+    if not g.check("test compiles (-Wall -Werror)", code == 0 and exe.exists(), o.strip()[-500:]):
+        return
+    code, o = sh(f'"{mpath(exe)}" 2>&1')
+    g.out += o
+    g.check("test prints W07 PASS", code == 0 and "W07 PASS" in o, o.strip()[-500:])
+
+
+def g_regions(g, a):
+    """Card W08: runtime/regions.c (guest memory map as an interval map) against recomp/test_regions.c."""
+    out = LAB / "w08"
+    out.mkdir(parents=True, exist_ok=True)
+    src = PD / "runtime" / "regions.c"
+    if not g.check("runtime/regions.c installed", src.exists(), src):
+        return
+    g.artifact(src)
+    exe = out / "test_regions.exe"
+    exe.unlink(missing_ok=True)
+    code, o = sh(ENV_MSYS + f'clang -Wall -Werror -O1 -I"{mpath(PD / "runtime")}" "{mpath(RECOMP / "test_regions.c")}" '
+                 f'"{mpath(src)}" -o "{mpath(exe)}"')
+    g.out = o
+    if not g.check("test compiles (-Wall -Werror)", code == 0 and exe.exists(), o.strip()[-500:]):
+        return
+    code, o = sh(f'"{mpath(exe)}" 2>&1', timeout=600)
+    g.out += o
+    g.check("test prints W08 PASS", code == 0 and "W08 PASS" in o, o.strip()[-500:])
+
+
+GATES = {"dumps": g_dumps, "host": g_host, "link": g_link, "boot": g_boot, "simd": g_simd, "excl_pair": g_excl_pair, "nvn_null": g_nvn_null, "sdl_null": g_sdl_null, "pl": g_pl, "cmdbuf_split": g_cmdbuf_split, "regions": g_regions}
 
 
 def run_gate(name, a):
@@ -468,8 +529,9 @@ def main():
         s = sp.add_parser(n)
         s.add_argument("gate", choices=GATES)
         s.add_argument("--agent", default="claude", choices=["claude", "qwen", "user"])
-        s.add_argument("--min-stage", choices=STAGE_NAMES)
+        s.add_argument("--min-stage", help="stage, or comma list of stages that must all be reached: " + ", ".join(STAGE_NAMES))
         s.add_argument("--seconds", type=int, default=30)
+        s.add_argument("--repeat", type=int, default=1, help="boot: N runs, all must pass")
         s.add_argument("--version", default="base", help="dump version: dumps/<version>, lab/gen-<version> (base = lab/genfull)")
         if n == "claim":
             s.add_argument("--text", required=True)
