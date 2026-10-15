@@ -17,7 +17,7 @@
 #ifndef PVGAME_ID
 #define PVGAME_ID "dev"
 #endif
-#define PVGAME_ABI 1
+#define PVGAME_ABI 2
 
 typedef struct {
     const char *name;        // "main", "subsdk0", "sdk"
@@ -25,6 +25,7 @@ typedef struct {
     const uint64_t *addrs;   // sorted guest addresses of the recompiled functions
     const GuestFn *fns;      // the functions at them
     const uint64_t *count;
+    const char *build_id;    // first 8 bytes of the NSO module id, hex (the loader refuses any other binary)
 } PvModuleTable;
 
 typedef struct {

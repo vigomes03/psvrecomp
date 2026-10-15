@@ -41,9 +41,18 @@ static void module_init(Cpu *c, Module *m) {
     if (m->init) guest_call(c, m->init);
     else run_array(c, m->init_array, m->init_array_sz);
 }
-// x2 (after nnosInitialize): SDK side first (sdk, then subsdk0, which links against it); x3: the game.
-static void rtld_init_sdk(Cpu *c) { module_init(c, &g_modules[2]); module_init(c, &g_modules[1]); }
-static void rtld_init_main(Cpu *c) { module_init(c, &g_modules[0]); }
+// x2 (after nnosInitialize) runs nothing: Pokémon's sdk constructors (iostream init -> the game's own malloc, which
+// keeps its allocator in main's TLS) need the heap and the thread-local allocator that nninitStartup sets up, and
+// __nnmusl_init_dso skips the TLS/thread-pointer setup while nn::os::MemoryAllocatorForThreadLocalInitialized() is
+// false (boot probe 14/10: sdk DT_INIT at x2 -> tpidr 0 -> fault at 0x20). So every DT_INIT runs at x3, after
+// nninitStartup, dependencies first: sdk, subsdk0, then the game. PVR_INIT_AT_X2=1 restores the LAS order.
+static void rtld_init_sdk(Cpu *c) {
+    if (getenv("PVR_INIT_AT_X2")) { module_init(c, &g_modules[2]); module_init(c, &g_modules[1]); }
+}
+static void rtld_init_main(Cpu *c) {
+    if (!getenv("PVR_INIT_AT_X2")) { module_init(c, &g_modules[2]); module_init(c, &g_modules[1]); }
+    module_init(c, &g_modules[0]);
+}
 static void rtld_fini(Cpu *c) { (void)c; LOG("[pvhost] nnMain returned (fini)\n"); }
 
 // Claim the guest address range before anything else can map there.

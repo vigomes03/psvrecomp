@@ -36,6 +36,8 @@ STAGES = [
     ("init_sdk", r"^init sdk "),
     ("init_subsdk0", r"^init subsdk0 "),
     ("init_main", r"^init main "),
+    ("nnmain_started", r"^init main [\s\S]*?\[sm\] GetService"),  # the game itself asks for services
+    ("romfs_read", r"\[fs\] romfs reads"),
     ("nnmain_returned", r"nnMain returned"),
     ("survived_time_limit", r"time limit reached"),
 ]
@@ -112,7 +114,15 @@ def g_dumps(g, a):
         g.info["pinned"] = ref.name
 
 
+def dirs(a):
+    """Per dump version: base keeps lab/genfull + lab/host; others use lab/gen-<v> + lab/host-<v>."""
+    v = getattr(a, "version", "base") or "base"
+    return (GENFULL, HOST) if v == "base" else (LAB / f"gen-{v}", LAB / f"host-{v}")
+
+
 def g_host(g, a):
+    GENFULL, HOST = dirs(a)
+    HOST.mkdir(parents=True, exist_ok=True)
     for f in ["pvhost.exe", "pvhost.dll.a"]:
         (HOST / f).unlink(missing_ok=True)
     code, out = sh(f'bash build_host.sh "{bpath(HOST)}"', cwd=RECOMP, timeout=1200)
@@ -125,13 +135,14 @@ def g_host(g, a):
 
 
 def g_link(g, a):
+    GENFULL, HOST = dirs(a)
     (HOST / "pvgame.dll").unlink(missing_ok=True)
     objs = {d: len(list((GENFULL / d).glob("*.o"))) for d in ["obj", "obj_subsdk0", "obj_sdk"]}
     g.info["objs"] = objs
     g.check("generated objects present", all(objs.values()), objs)
     g.check("pvhost.dll.a present (run gate host first)", (HOST / "pvhost.dll.a").exists())
     # run_boot.sh links then boots; link-only: run with 0 s and ignore the boot part.
-    code, out = sh(f'bash run_boot.sh "{bpath(GENFULL)}" "{bpath(HOST)}" 1', cwd=RECOMP, timeout=3600)
+    code, out = sh(f'bash run_boot.sh "{bpath(GENFULL)}" "{bpath(HOST)}" 1 {a.version}', cwd=RECOMP, timeout=3600)
     g.out = out
     g.check("pvgame.dll produced", g.artifact(HOST / "pvgame.dll", hash_it=False), out[-300:])
     if (HOST / "pvgame.dll").exists():
@@ -155,9 +166,10 @@ def boot_stage(log):
 
 
 def g_boot(g, a):
+    GENFULL, HOST = dirs(a)
     secs = a.seconds
     (HOST / "boot.log").unlink(missing_ok=True)
-    code, out = sh(f'bash run_boot.sh "{bpath(GENFULL)}" "{bpath(HOST)}" {secs}', cwd=RECOMP,
+    code, out = sh(f'bash run_boot.sh "{bpath(GENFULL)}" "{bpath(HOST)}" {secs} {a.version}', cwd=RECOMP,
                    timeout=secs + 3600)
     g.out = out
     log_p = HOST / "boot.log"
@@ -381,7 +393,7 @@ def main():
         s.add_argument("--agent", default="claude", choices=["claude", "qwen", "user"])
         s.add_argument("--min-stage", choices=STAGE_NAMES)
         s.add_argument("--seconds", type=int, default=30)
-        s.add_argument("--version", default="base", help="dumps/<version> for the dumps gate")
+        s.add_argument("--version", default="base", help="dump version: dumps/<version>, lab/gen-<version> (base = lab/genfull)")
         if n == "claim":
             s.add_argument("--text", required=True)
             s.add_argument("--expect", default="pass", help="pass | stage:<name>")

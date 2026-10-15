@@ -14,19 +14,18 @@
 // macOS reserves 0x2_0000_0000-0x70_0000_0000, and guest addresses must fit in 39 bits, so the
 // guest lives in a 12.5 GB window at 0x70_0000_0000 claimed at startup (see main.c).
 #define GUEST_LO     0x7000000000ull
-#define GUEST_HI     0x7320000000ull
+#define GUEST_HI     0x8000000000ull   // Windows: reserve up to the 39-bit limit (only reserved; committed lazily)
 // module bases: recomp/layout.py (Pokémon's main is 68 MiB, so not LAS's sdk at +64 MiB)
-#define MAIN_BASE    0x7000000000ull
-#define SUBSDK0_BASE 0x7004400000ull
-#define SDK_BASE     0x7004c00000ull
+// Module bases: per build, from recomp/layout.py via pvgame.dll (loader_load).
 #define HLE_BASE     0x7080000000ull   // fake addresses for host-implemented functions
 #define HLE_SIZE     0x0000100000ull
 #define TLS_BASE     0x7090000000ull
 #define TLS_SIZE     0x0000100000ull
 #define HLE_HEAP     0x7092000000ull   // guest-visible memory owned by host code
 #define HLE_HEAP_SIZE 0x000E000000ull
-#define ALIAS_BASE   0x7100000000ull   // alias region (svcMapMemory targets)
-#define ALIAS_SIZE   0x0100000000ull
+#define ALIAS_BASE   0x7400000000ull   // alias region (svcMapMemory / MapPhysicalMemory targets)
+#define ALIAS_SIZE   0x0C00000000ull   // 48 GiB: SDK 13 VAMM (nn::os virtual address memory) reserves 12 GiB here for
+                                       // the game's StandardAllocator(nullptr, 12 GiB) (boot probe 14/10)
 #define HEAP_BASE    0x7240000000ull
 #define HEAP_MAX     0x00D0000000ull   // 3.25 GB
 

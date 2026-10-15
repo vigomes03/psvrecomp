@@ -723,6 +723,21 @@ static void svc_impl(Cpu *c, uint32_t imm, uint64_t pc) {
     }
     case 0x26:  // Break
         if (x[0] & 0x80000000u) { LOG("[kernel] Break notification %llx\n", x[0]); x[0] = R_OK; break; }
+        if (x[2] == 4 && x[1] >= GUEST_LO && x[1] < GUEST_HI) {  // nn::diag Abort(Result): show the result
+            uint32_t r = *(uint32_t *)(uintptr_t)x[1];
+            LOG("[kernel] svcBreak result %#x = %04u-%04u (module %u, desc %u)\n", r, 2000 + (r & 0x1FF),
+                (r >> 9) & 0x1FFF, r & 0x1FF, (r >> 9) & 0x1FFF);
+        }
+        // guest frame-pointer chain (x29) -> names (exported symbols only; f_<addr> otherwise)
+        for (uint64_t fp = c->x[29], lr = c->x[30], i = 0; i < 16 && lr; i++) {
+            uint64_t off = 0;
+            const char *n = loader_symbol_at(lr, &off);
+            LOG("  guest #%llu %llx %s+%#llx\n", (unsigned long long)i, (unsigned long long)lr, n ? n : "?",
+                (unsigned long long)off);
+            if (fp < GUEST_LO || fp >= GUEST_HI || (fp & 7)) break;
+            lr = ((uint64_t *)(uintptr_t)fp)[1];
+            fp = ((uint64_t *)(uintptr_t)fp)[0];
+        }
         FATAL("svcBreak(reason=%llx, info=%llx, size=%llx) at %llx\n", x[0], x[1], x[2], pc);
     case 0x27: debug_string(x[0], x[1]); x[0] = R_OK; break;
     case 0x29: {  // GetInfo(_, id0, handle, id1)
@@ -745,7 +760,8 @@ static void svc_impl(Cpu *c, uint32_t imm, uint64_t pc) {
         case 13: v = GUEST_HI - GUEST_LO; break;
         case 14: v = STACK_BASE; break;
         case 15: v = STACK_SIZE; break;
-        case 16: case 17: v = 0; break;
+        case 16: v = 0x1000000; break;  // SystemResourceSizeTotal != 0 -> nn::os VAMM enabled (SDK 13 allocator needs it)
+        case 17: v = 0; break;
         case 18: v = 0x01006BB00C6F0000ull; break;
         case 20: v = 0; break;
         default: r = R_INVALID_ENUM; LOG("[kernel] GetInfo unknown id %u/%llu\n", id0, x[3]);
@@ -755,11 +771,14 @@ static void svc_impl(Cpu *c, uint32_t imm, uint64_t pc) {
         break;
     }
     case 0x2C:  // MapPhysicalMemory(addr, size)
-        memset((void *)x[0], 0, x[1]);
+        // Map only adds backing: pages that are already mapped keep their contents (the SDK 13 VAMM maps a 4 KiB
+        // page with its allocator object in it, then the whole range around it). Never-used pages of the reserved
+        // window read as zero (committed lazily); UnmapPhysicalMemory decommits, so a later map starts zeroed again.
         region_add(x[0], x[1], 0x7, 3);
         x[0] = R_OK;
         break;
-    case 0x2D:  // UnmapPhysicalMemory
+    case 0x2D:  // UnmapPhysicalMemory(addr, size)
+        plat_reset_guest(x[0], x[0] + x[1]);
         region_remove(x[0]);
         x[0] = R_OK;
         break;

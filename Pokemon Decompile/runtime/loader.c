@@ -3,6 +3,8 @@
 #include <string.h>
 
 #include "rt.h"
+#include "pvgame.h"
+const PvGameTables *pvgame_tables_loaded(void);
 
 Module g_modules[4];
 int g_nmodules;
@@ -49,10 +51,14 @@ static uint8_t *read_file(const char *path, size_t *len) {
     return p;
 }
 
-static void load_nso(Module *m, const char *path, uint64_t base) {
+static void load_nso(Module *m, const char *path, uint64_t base, const char *want_build) {
     size_t len;
     uint8_t *raw = read_file(path, &len);
     if (!raw || memcmp(raw, "NSO0", 4)) FATAL("cannot load %s\n", path);
+    char build[17];  // module id (NSO 0x40): the recompiled code is only valid for this exact binary
+    for (int i = 0; i < 8; i++) snprintf(build + 2 * i, 3, "%02x", raw[0x40 + i]);
+    if (want_build && strcmp(build, want_build))
+        FATAL("%s: build id %s, but pvgame.dll was recompiled from %s (wrong dump version?)\n", path, build, want_build);
     uint32_t flags = *(uint32_t *)(raw + 0xC);
     uint32_t seg[3][3];  // file_off, mem_off, size
     for (int i = 0; i < 3; i++) memcpy(seg[i], raw + 0x10 + i * 0x10, 12);
@@ -172,15 +178,17 @@ static void relocate(Module *m) {
     LOG("relocated %-5s (%d imports bound to host stubs)\n", m->name, unresolved);
 }
 
+// Module names and bases come from pvgame.dll (pvgame_entry.c, generated from recomp/layout.py for the dump the code
+// was recompiled from): one source of truth, so a v1.0.0 library can't silently run against a v4.0.0 exefs layout.
 void loader_load(const char *exefs) {
     char path[1024];
-    static const struct { const char *name; uint64_t base; } mods[] = {
-        {"main", MAIN_BASE}, {"subsdk0", SUBSDK0_BASE}, {"sdk", SDK_BASE}};  // g_modules[0..2]
-    for (unsigned i = 0; i < sizeof mods / sizeof mods[0]; i++) {
+    const PvGameTables *t = pvgame_tables_loaded();
+    if (!t) FATAL("loader: pvgame.dll not loaded\n");
+    for (uint32_t i = 0; i < t->nmods; i++) {  // g_modules[0..2] = main, subsdk0, sdk
         Module *m = &g_modules[g_nmodules++];
-        m->name = mods[i].name;
+        m->name = t->mods[i].name;
         snprintf(path, sizeof path, "%s/%s", exefs, m->name);
-        load_nso(m, path, mods[i].base);
+        load_nso(m, path, t->mods[i].base, t->mods[i].build_id);
     }
     for (int i = 0; i < g_nmodules; i++) relocate(&g_modules[i]);
 }
