@@ -21,8 +21,12 @@ fi
 export PVR_INPUT
 export LARECOMP_SCREENSHOT_EVERY=${LARECOMP_SCREENSHOT_EVERY:-100} LARECOMP_SCREENSHOT_FROM=${LARECOMP_SCREENSHOT_FROM:-100}
 export PVR_RUN_SECONDS=$SECS
+# Saves: the pipeline NEVER uses lab/host-vk/save ([USER]'s manual-play save). It plays in save_auto, reset before
+# every run from SAVE_SEED=<dir with save_0/...> when given (e.g. SAVE_SEED=D:/Dev/REA/lab/saves/user_antes_batalha_20261015).
+export LARECOMP_SAVE_DIR=${LARECOMP_SAVE_DIR:-D:/Dev/REA/lab/host-vk/save_auto}
 cd "$H" || exit 1
 for i in 1 2 3; do
+  if [ -n "${SAVE_SEED:-}" ]; then rm -rf "$LARECOMP_SAVE_DIR" && cp -r "$SAVE_SEED" "$LARECOMP_SAVE_DIR"; fi
   rm -rf build && mkdir -p build/frames
   env "$@" ./pvhost.exe D:/Dev/REA/dumps/v400/exefs D:/Dev/REA/dumps/v400/romfs > "$TAG.log" 2>&1
   bad=$(grep -c "FATAL\|exception c0000005" "$TAG.log")

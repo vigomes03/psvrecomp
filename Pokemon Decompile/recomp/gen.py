@@ -172,11 +172,13 @@ class Module:
                 pc = mu.reg_read(A.UC_ARM64_REG_PC)
             return False
 
-        targets = []
-        try:
+        idx_regs = self._index_regs(entry, set_at, idx)  # (PVRecomp) copies made anywhere before, as the fallthrough form
+
+        def run(fill):
+            out = []
             for i in range(count):
                 for r in range(29):
-                    mu.reg_write(A.UC_ARM64_REG_X0 + r, SCRATCH_MEM + 0x80000)
+                    mu.reg_write(A.UC_ARM64_REG_X0 + r, fill)
                 mu.reg_write(A.UC_ARM64_REG_SP, SCRATCH_MEM + 0x80000)
                 a2 = entry
                 while a2 < start:
@@ -186,14 +188,21 @@ class Module:
                     a2 += 4
                 if set_at != start and not step_to(start, set_at):
                     return None
-                self._set_index(mu, [idx], i)
+                self._set_index(mu, idx_regs, i)
                 if not step_to(set_at, br_pc):
                     return None
                 t = mu.reg_read(A.UC_ARM64_REG_X0 + rn if rn < 29 else
                                 (A.UC_ARM64_REG_X29 if rn == 29 else A.UC_ARM64_REG_X30))
                 if not (entry <= t < end) or t % 4:
                     return None
-                targets.append(t)
+                out.append(t)
+            return out
+
+        try:
+            targets = run(SCRATCH_MEM + 0x80000)
+            if targets is None or run(SCRATCH_MEM + 0x80000 + 0x1230) != targets:  # (PVRecomp) stability
+                self.stats['jt_unstable'] = self.stats.get('jt_unstable', 0) + (targets is not None)
+                return None
         except uc.UcError:
             return None
         return sorted(set(targets))
@@ -260,7 +269,11 @@ class Module:
         start = cmp
         while start - 4 >= entry and cmp - (start - 4) <= 4 * 12 and self.lift(start - 4).kind in ('op', 'asm'):
             start -= 4
-        idx_regs = self._index_regs(start, cmp, idx)
+        # (PVRecomp) copies of the index can be made before the window (e.g. `mov w20, w1; and w22, w1, #0xff; bl ..;
+        # cmp w22, #5; ...; and x8, x20, #0xff; ldrb ...`): look for them from the function entry. Missing one left x20
+        # with scratch garbage, every index gave the same target and the table was accepted with 1 case of 6 (crash at
+        # Violet's first battle: `no function at 7000cedb00`).
+        idx_regs = self._index_regs(entry, cmp, idx)
         mu = self.emu()
         targets = []
 
@@ -274,10 +287,11 @@ class Module:
                 pc = mu.reg_read(A.UC_ARM64_REG_PC)
             return False
 
-        try:
+        def run(fill):
+            out = []
             for i in range(count):
                 for r in range(29):
-                    mu.reg_write(A.UC_ARM64_REG_X0 + r, SCRATCH_MEM + 0x80000)
+                    mu.reg_write(A.UC_ARM64_REG_X0 + r, fill)
                 mu.reg_write(A.UC_ARM64_REG_SP, SCRATCH_MEM + 0x80000)
                 # replay address materialization (ADRP/ADR/ADD-imm) from the function entry, so table
                 # bases computed before loops or branches are known
@@ -296,7 +310,15 @@ class Module:
                                 (A.UC_ARM64_REG_X29 if rn == 29 else A.UC_ARM64_REG_X30))
                 if not (entry <= t < end) or t % 4:
                     return None
-                targets.append(t)
+                out.append(t)
+            return out
+
+        try:
+            targets = run(SCRATCH_MEM + 0x80000)
+            # (PVRecomp) stability: the targets must not depend on registers we did not set
+            if targets is None or run(SCRATCH_MEM + 0x80000 + 0x1230) != targets:
+                self.stats['jt_unstable'] = self.stats.get('jt_unstable', 0) + (targets is not None)
+                return None
         except uc.UcError:
             return None
         return sorted(set(targets))
