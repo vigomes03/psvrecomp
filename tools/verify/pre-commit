@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Pre-commit gate (install: cp tools/verify/pre-commit .git/hooks/pre-commit). Blocks commits that carry fakes:
+# echo-only "tests", swallowed build failures, docs that claim completion without a real gate run_id.
+# Bypass only with [USER]'s ok: git commit --no-verify (and say so in the commit message).
+cd "$(git rev-parse --show-toplevel)" || exit 1
+python tools/verify/test_gates.py > /dev/null || { echo "pre-commit: tools/verify/test_gates.py failed"; exit 1; }
+python tools/verify/gates.py lint --staged || {
+  echo "pre-commit: fake detector found problems (see above). Prove it with: python tools/verify/gates.py run <gate>"
+  exit 1
+}
+# Private content must never be staged.
+if git diff --cached --name-only | grep -E '^(dumps|keys|lab|Pokémon Violet)/|\.(nca|nsp|xci|keys)$'; then
+  echo "pre-commit: private game/key content staged"; exit 1
+fi

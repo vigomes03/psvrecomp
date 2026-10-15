@@ -375,9 +375,11 @@ class Module:
             refs.add(t)
             return f'__attribute__((musttail)) return {fname(t)}(c);'
 
-        # Functions with jump tables also get the all-instruction fallback: a table whose emulation
-        # missed some cases then still reaches the right instruction instead of aborting.
-        all_labels = bool(tables)
+        # Functions with an UNRESOLVED table get the all-instruction fallback (any instruction is reachable).
+        # PVRecomp: LAS gave it to every function with a table; on Pokémon's huge switch functions that made
+        # ~5k-case switches clang needed minutes per file. A resolved table enumerated every index by emulation;
+        # anything else goes to rt_dispatch, which fails loudly if the target isn't a function.
+        all_labels = any(v == 'all' for v in tables.values())
         if all_labels:
             labels = set(range(entry, end, 4))
         rando_here = [a for a in range(entry, end, 4) if a - self.base in RANDO_CODE]
@@ -447,7 +449,10 @@ class Module:
                 if jt:
                     cases = ' '.join(f'case {hx(t)}: goto L_{t:x};' for t in jt)
                     out.append(f'    switch ({ins.target}) {{ {cases} default: break; }}')
-                    out.append(f'    c->pc = {ins.target}; goto L_dispatch;')
+                    if all_labels:
+                        out.append(f'    c->pc = {ins.target}; goto L_dispatch;')
+                    else:
+                        out.append(f'    c->pc = {ins.target}; __attribute__((musttail)) return rt_dispatch(c);')
                     continue
                 out.append(f'    c->pc = {ins.target}; __attribute__((musttail)) return rt_dispatch(c);')
             elif k == 'ret':
@@ -524,6 +529,13 @@ def main():
                 start_set.add(t)
     # Code addresses materialized in registers (callbacks, vtables built at runtime): ADR, or
     # ADRP followed shortly by ADD on the same register.
+    # PVRecomp: skip targets inside the SAME boundary-function as the instruction. Compiler switch lowering
+    # (`adr xB, base; ldrb wI, [table, idx]; add x, xB, wI, sxtb #2; br x`) materializes a label of its own
+    # function; splitting there made 3.8k jump tables unresolvable in Pokémon's main (docs/roadmap/fase-1).
+    # A real callback points at another function; a missed interior pointer fails loudly in rt_dispatch.
+    def same_fn(pc, t):
+        k = bisect.bisect_right(starts, pc) - 1
+        return k >= 0 and starts[k] <= t < (starts[k + 1] if k + 1 < len(starts) else m.hi)
     adrp_regs = {}
     for i, w in enumerate(m.words):
         pc = m.lo + i * 4
@@ -531,7 +543,7 @@ def main():
             imm = ((w >> 5) & 0x7FFFF) << 2 | ((w >> 29) & 3)
             if imm & (1 << 20):
                 imm -= 1 << 21
-            if m.in_text(pc + imm):
+            if m.in_text(pc + imm) and not same_fn(pc, pc + imm):
                 start_set.add(pc + imm)
         elif (w & 0x9F000000) == 0x90000000:  # ADRP
             imm = ((w >> 5) & 0x7FFFF) << 2 | ((w >> 29) & 3)
@@ -542,7 +554,7 @@ def main():
             rn, rd = (w >> 5) & 31, w & 31
             if rn in adrp_regs and i - adrp_regs[rn][1] <= 8:
                 t = adrp_regs[rn][0] + ((w >> 10) & 0xFFF)
-                if m.in_text(t):
+                if m.in_text(t) and not same_fn(pc, t):
                     start_set.add(t)
     scanned = {}
     rounds = 0

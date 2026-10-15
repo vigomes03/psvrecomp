@@ -55,6 +55,17 @@ Se uma skill estiver errada ou faltar uma armadilha descoberta, **corrigir a ski
 - Retry: `<cartão>-t2.md` com seção "TENTATIVA 2 — REJEITADA" listando cada erro e a resposta correta.
 
 ## 4. Verificação (o worker se auto-reporta; Claude nunca confia sem checar)
+- **Gates (`tools/verify/gates.py`) são a única prova aceita.** "Compila", "linka", "boot OK", "fase N concluída"
+  só valem citando um `run_id` de `python tools/verify/gates.py run <dumps|host|link|boot|simd|excl_pair>`, que roda o
+  comando de verdade e grava a evidência em `work/evidence/gates.jsonl` (hashes, exit code, estágio do boot).
+  Ninguém escreve nesse arquivo à mão. Doc que diz ✅/[x]/concluído sem `run_id=...` é barrada no pre-commit.
+- **Proibido (contado como falso):** script que só faz `echo "✅ PASSOU"`; `|| true` em build/run; trocar código real
+  por stub "para compilar"; `rm -rf` em `dumps/`; replace cego em docs; dizer que uma ferramenta "não existe" sem
+  procurar em `D:\Tools`. Falhou? Dizer que falhou, com a saída.
+- **Placar do qwen:** toda afirmação de um agente vira uma linha em `work/evidence/claims.jsonl`:
+  `gates.py claim <gate> --agent qwen --text "<o que ele disse>"` (roda o gate e julga) ou, para turnos de chat
+  já passados, `gates.py note --agent qwen --verdict FALSE --evidence "<prova>"`. `gates.py score -v` = taxa de falsas.
+- Pre-commit: `cp tools/verify/pre-commit .git/hooks/pre-commit` (roda `test_gates.py` + `gates.py lint --staged`).
 - RE: conferir 2 ou 3 afirmações contra `<relatório>.log.jsonl` (saídas reais). Um id real numa afirmação errada passa
   pelo harness: só a revisão pega. Registrar o veredito em `docs/rea-worker-reviews.md`.
 - Código: compilar/rodar de verdade; teste diferencial contra oráculo sempre que existir (Unicorn, ferramenta de
