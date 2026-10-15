@@ -7,6 +7,7 @@
 | [rea-worker-reviews.md](rea-worker-reviews.md) | Revisões do Claude sobre cada execução do worker (aceito/rejeitado e por quê) |
 | [estudo-lasrecomp.md](estudo-lasrecomp.md) | Como o LAS Recomp foi feito: recompilação estática ARM64→C, HLE, NVN→Vulkan, fluxo de trabalho |
 | [pipeline-log.md](pipeline-log.md) | Registro de cada cartão de trabalho (dono, modelo, tentativas, resultado) |
+| [../Pokemon Decompile/README.md](../Pokemon%20Decompile/README.md) | **PSV Recomp**: o que é, como compilar/rodar, variáveis de diagnóstico |
 | [roadmap/](roadmap/README.md) | **Roadmap do Pokémon Violet Recomp**: fases 0-9, marcos, riscos |
 
 Regras de escrita: fatos verificados marcados (✅ executado / 📖 lido no código / ❓ hipótese), sempre com o

@@ -73,6 +73,30 @@ Se uma skill estiver errada ou faltar uma armadilha descoberta, **corrigir a ski
 - Nunca reportar "feito/OK" sem a saída que prova. Falhou? Dizer que falhou e por quê.
 - Todo cartão vira uma linha em `docs/pipeline-log.md` (dono, modelo, tentativas, tempo, resultado, motivo).
 
+### 4.1 Regras anti-alucinação (lições de 15/10: 20 de 27 afirmações do qwen eram falsas)
+Valem para o qwen como worker **e** para qualquer modelo local que assuma o chat (fallback do Hermes).
+1. **Modelo local no comando do chat = só observa.** Pode rodar gates, ler logs e escrever notas em
+   `work/notes/`. **Não** cria cartões, **não** despacha subagentes, **não** edita código/roadmap, **não** declara
+   fase concluída. Fase "concluída" só existe com o marco do roadmap provado por `run_id` (M3 = screenshot com o logo).
+2. **O roadmap manda.** Os números de fase são os de `docs/roadmap/README.md`; inventar "fase 4.3/5" de outra coisa
+   é falso. Na dúvida, ler a página da fase antes de agir.
+3. **Caminhos absolutos dentro de `D:\Dev\REA`.** Subagente/worker sem caminho absoluto escreveu no repo do Hospital
+   (`C:\Users\ser_l\RPG\Hospital`). Todo cartão diz o arquivo exato de saída; Claude confere com `git status` nos
+   dois repos.
+4. **Só nomes que existem.** Antes de citar uma função/tipo num cartão, `grep` no runtime ou no log. Funções NVN
+   do jogo vêm de `lab/host-*/nvnmiss.log` (`PVR_NVN_MISSING=1`), não da memória do modelo
+   (`nvnCommandBufferPresent` e `NvnPresentId` não existem).
+5. **Como uma função NVN entra no runtime:** `NVN(nvnNome) { ... }` em `nvn/cmdbuf.c` ou `nvn/objects.c`
+   (macro de `nvn/nvn.h`, argumentos em `A(i)`/`AP(i)`), registrada por nome no `nvnDeviceGetProcAddress`.
+   Função C solta em arquivo novo **não é chamada por ninguém** e nem entra no build (`build_host.sh` lista os
+   arquivos de `nvn/` um a um).
+6. **Arquivo novo tem que ser usado.** Aceite inclui: entrou no `build_host.sh`/foi referenciado, e uma rodada real
+   mostra o efeito (ex.: `nvn-missing` some do log). "Compila" com arquivo morto conta como falso.
+7. **Executou? Cole a saída.** "Pronto para rodar" exige que o comando tenha rodado nesta máquina (ex.: o exe em janela
+   precisa de `recomp/run_window.cmd` por causa das DLLs do MSYS2).
+8. **Um cartão por vez, numerado do próximo livre de `docs/pipeline-log.md`.** Nada de gerar dezenas de cartões
+   por script com o mesmo texto: cartão sem a API real e sem aceite checável é rejeitado antes de despachar.
+
 ## 5. Privacidade e parte legal (inegociável)
 - O dump (`Pokémon Violet/*.xci`), chaves (`prod.keys`, `title.keys`), `exefs/`, `romfs/`, código gerado e saídas de
   Ghidra/REA sobre o jogo são **privados**: ficam em pastas ignoradas (`.gitignore`), **nunca** em commit, issue,

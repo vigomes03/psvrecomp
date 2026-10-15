@@ -33,6 +33,14 @@ O artefato do npm 6.4.0 **não serve** para este snapshot (`privateBridgeDescrip
 - **`make` do MSYS2 + gcc nativo perde o `TMP`** (gcc: `Cannot create temporary file in C:\WINDOWS\`). Para projetos com Makefile simples use o `mingw32-make` do WinLibs, com `TMP` apontando para o Temp do Windows.
 - Variáveis de usuário gravadas com `setx`: `GHIDRA_INSTALL_DIR`, `JAVA_HOME`.
 
+## Runtime em janela (PSV Recomp, Vulkan) — verificado em 15/10/2026
+- Build: `bash "Pokemon Decompile/recomp/build_host.sh" /d/Dev/REA/lab/host-vk vulkan` (clang/SDL3/shaderc do
+  `D:\msys64\ucrt64`, só dentro do comando). Saída `lab/host-vk/pvhost.exe` + `pvgame.dll`.
+- `recomp/run_window.cmd` põe `D:\msys64\ucrt64\bin` no PATH (DLLs SDL3, shaderc, libstdc++), limpa as variáveis de
+  debug e abre a janela no monitor 2 (`PVR_DISPLAY`). `tools/verify/run_auto.sh` é a versão do pipeline.
+- GPU: RTX 3070 Ti, Vulkan 1.3. Desempenho medido pelo [USER] em 15/10: 5-10 fps em interiores, ~3 fps em área aberta,
+  CPU ~9 %, GPU quase ociosa (gargalo no lado do CPU/sincronização, não na placa).
+
 ## Ainda NÃO instalado (próximo passo para o projeto Pokémon)
 - **Chaves**: `prod.keys` (e `title.keys`, se houver) tiradas do **seu** console com Lockpick_RCM →
   colocar em `D:\Dev\REA\keys\` (ignorado pelo git). Sem elas, o hactool só lê o cabeçalho do XCI.

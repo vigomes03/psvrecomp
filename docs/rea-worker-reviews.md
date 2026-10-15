@@ -16,3 +16,11 @@ Chamadores: `FUN_140003498` (call em 0x14000377c) e `FUN_140003b3c` (call em 0x1
 - Numa retry ele "melhora" partes que já estavam certas (mudou o tipo `Insn('op')`). No cartão de retry, liste o que **não** pode mudar,
   e o teste de aceite deve checar a interface (tipo/assinatura), não só o texto ou o resultado.
 - Teste diferencial contra oráculo (Unicorn) pegou o erro que a leitura rápida não pegaria.
+
+## W20 glsl_slice.py (15/10) — REJEITADO 2x
+- t1: não imprimia nada (pc lido na ordem errada ao andar para trás; busca começava antes da própria instrução — parte
+  disso era erro do cartão, que contradizia o teste). t2: `uses` incluía o próprio registro e a recursão partia da linha 0.
+- Claude reescreveu (`tools/rea/glsl_slice.py`, teste `tools/verify/test_glsl_slice.py` PASS). Tentativas em
+  `lab/arquivo/w20/`; placar: `gates.py note --verdict FALSE`.
+- Lição: ferramenta com análise de fluxo (andar para trás com predicados) é trabalho de núcleo; o qwen acerta melhor
+  cartões com entrada/saída fixas e tabela de valores.
