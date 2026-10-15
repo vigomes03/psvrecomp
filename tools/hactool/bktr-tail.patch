@@ -1,0 +1,15 @@
+diff --git a/nca.c b/nca.c
+index 8a84366..7d0ca59 100644
+--- a/nca.c
++++ b/nca.c
+@@ -1149,8 +1149,8 @@ void nca_process_bktr_section(nca_section_ctx_t *ctx) {
+     /* Validate magics. */
+     if (sb->relocation_header.magic == MAGIC_BKTR && sb->subsection_header.magic == MAGIC_BKTR) {
+         if (sb->relocation_header.offset + sb->relocation_header.size != sb->subsection_header.offset ||
+-            sb->subsection_header.offset + sb->subsection_header.size != ctx->size) {
+-            fprintf(stderr, "Invalid BKTR layout!\n");
++            sb->subsection_header.offset + sb->subsection_header.size > ctx->size) {
++            fprintf(stderr, "Invalid BKTR layout! reloc off=%llx size=%llx subs off=%llx size=%llx section=%llx\n", (unsigned long long)sb->relocation_header.offset, (unsigned long long)sb->relocation_header.size, (unsigned long long)sb->subsection_header.offset, (unsigned long long)sb->subsection_header.size, (unsigned long long)ctx->size);
+             exit(EXIT_FAILURE);
+         }
+         /* Allocate space for an extra (fake) relocation entry, to simplify our logic. */
