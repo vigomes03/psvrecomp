@@ -434,16 +434,49 @@ static void svc_signal_process_wide_key(uint64_t key, int32_t count) {
 enum { ARB_WAIT_LESS = 0, ARB_DEC_WAIT_LESS = 1, ARB_WAIT_EQ = 2 };
 enum { ARB_SIGNAL = 0, ARB_SIGNAL_INC_EQ = 1, ARB_SIGNAL_MOD_EQ = 2 };
 
+// guest LDXR/STXR concurrent with the kernel: CAS like Eden DecrementIfLessThan/UpdateIfEqual, PVRecomp 14/10
+static bool dec_if_less(uint64_t addr, int32_t value, int32_t *out) {
+    uint32_t *p = u32p(addr);
+    for (;;) {
+        uint32_t cur = __atomic_load_n(p, __ATOMIC_SEQ_CST);
+        if ((int32_t)cur < value) {
+            if (__atomic_compare_exchange_n(p, &cur, (uint32_t)(cur - 1), false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
+                { *out = (int32_t)cur; return true; }
+        } else {
+            *out = (int32_t)cur;
+            return false;
+        }
+    }
+}
+
+// guest LDXR/STXR concurrent with the kernel: CAS like Eden DecrementIfLessThan/UpdateIfEqual, PVRecomp 14/10
+static bool update_if_equal(uint64_t addr, int32_t value, int32_t new_value, int32_t *out) {
+    uint32_t *p = u32p(addr);
+    for (;;) {
+        uint32_t cur = __atomic_load_n(p, __ATOMIC_SEQ_CST);
+        if ((int32_t)cur == value) {
+            if (__atomic_compare_exchange_n(p, &cur, (uint32_t)new_value, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
+                { *out = (int32_t)cur; return true; }
+        } else {
+            *out = (int32_t)cur;
+            return false;
+        }
+    }
+}
+
 static uint32_t svc_wait_for_address(uint64_t addr, uint32_t type, int32_t value, int64_t timeout) {
     pthread_mutex_lock(&g_klock);
-    int32_t cur = (int32_t)__atomic_load_n(u32p(addr), __ATOMIC_SEQ_CST);
+    int32_t cur;
     bool wait;
-    if (type == ARB_WAIT_LESS) wait = cur < value;
-    else if (type == ARB_DEC_WAIT_LESS) {
+    if (type == ARB_WAIT_LESS) {
+        cur = __atomic_load_n(u32p(addr), __ATOMIC_SEQ_CST);
         wait = cur < value;
-        if (wait) __atomic_store_n(u32p(addr), (uint32_t)(cur - 1), __ATOMIC_SEQ_CST);
-    } else if (type == ARB_WAIT_EQ) wait = cur == value;
-    else { pthread_mutex_unlock(&g_klock); return R_INVALID_ENUM; }
+    } else if (type == ARB_DEC_WAIT_LESS) {
+        wait = dec_if_less(addr, value, &cur);
+    } else if (type == ARB_WAIT_EQ) {
+        cur = __atomic_load_n(u32p(addr), __ATOMIC_SEQ_CST);
+        wait = cur == value;
+    } else { pthread_mutex_unlock(&g_klock); return R_INVALID_ENUM; }
     if (!wait) { pthread_mutex_unlock(&g_klock); return R_INVALID_STATE; }
     if (timeout == 0) { pthread_mutex_unlock(&g_klock); return R_TIMEOUT; }
     t_cur->wait_kind = WAIT_ARBITER;
@@ -455,14 +488,20 @@ static uint32_t svc_wait_for_address(uint64_t addr, uint32_t type, int32_t value
 
 static int arbiter_wake(uint64_t addr, int32_t count) {
     int woken = 0;
-    for (KThread *t = g_waitlist; t; t = t->wnext) {
+    for (;;) {
         if (count > 0 && woken >= count) break;
-        if (t->wait_kind == WAIT_ARBITER && t->wait_addr == addr) {
-            t->wait_kind = WAIT_NONE;
-            t->wait_result = R_OK;
-            wake(t);
-            woken++;
+        KThread *t = NULL;
+        for (KThread *it = g_waitlist; it; it = it->wnext) {
+            if (it->wait_kind == WAIT_ARBITER && it->wait_addr == addr) {
+                if (!t || it->prio < t->prio ||
+                    (it->prio == t->prio && !t)) t = it;
+            }
         }
+        if (!t) break;
+        t->wait_kind = WAIT_NONE;
+        t->wait_result = R_OK;
+        wake(t);
+        woken++;
     }
     return woken;
 }
@@ -470,21 +509,33 @@ static int arbiter_wake(uint64_t addr, int32_t count) {
 static uint32_t svc_signal_to_address(uint64_t addr, uint32_t type, int32_t value, int32_t count) {
     pthread_mutex_lock(&g_klock);
     uint32_t r = R_OK;
-    int32_t cur = (int32_t)__atomic_load_n(u32p(addr), __ATOMIC_SEQ_CST);
     if (type == ARB_SIGNAL) {
         arbiter_wake(addr, count);
     } else if (type == ARB_SIGNAL_INC_EQ) {
-        if (cur != value) r = R_INVALID_STATE;
-        else { __atomic_store_n(u32p(addr), (uint32_t)(cur + 1), __ATOMIC_SEQ_CST); arbiter_wake(addr, count); }
+        int32_t cur;
+        if (!update_if_equal(addr, value, value + 1, &cur)) {
+            r = R_INVALID_STATE;
+        } else {
+            arbiter_wake(addr, count);
+        }
     } else if (type == ARB_SIGNAL_MOD_EQ) {
         int waiting = 0;
         for (KThread *t = g_waitlist; t; t = t->wnext)
             if (t->wait_kind == WAIT_ARBITER && t->wait_addr == addr) waiting++;
         int32_t nv;
-        if (count <= 0) nv = waiting > 0 ? value - 2 : value + 1;
-        else nv = waiting == 0 ? value + 1 : (waiting <= count ? value - 1 : value);
-        if (cur != value) r = R_INVALID_STATE;
-        else { __atomic_store_n(u32p(addr), (uint32_t)nv, __ATOMIC_SEQ_CST); arbiter_wake(addr, count); }
+        if (count <= 0) {
+            nv = waiting > 0 ? value - 2 : value + 1;
+        } else {
+            nv = waiting == 0 ? value + 1 : (waiting <= count ? value - 1 : value);
+        }
+        int32_t cur;
+        if (nv != value) {
+            if (!update_if_equal(addr, value, nv, &cur)) r = R_INVALID_STATE;
+        } else {
+            cur = __atomic_load_n(u32p(addr), __ATOMIC_SEQ_CST);
+            if (cur != value) r = R_INVALID_STATE;
+        }
+        if (r == R_OK) arbiter_wake(addr, count);
     } else {
         r = R_INVALID_ENUM;
     }

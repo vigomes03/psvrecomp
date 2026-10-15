@@ -15,3 +15,7 @@
 {"time": "2026-10-14T23:05:30", "agent": "qwen", "claim": "W06: svc_wait_process_wide_key grava a key antes de liberar o mutex; host compila", "gate": "host", "expect": "pass", "run_id": "8574b2a012", "verdict": "true", "source": "gate"}
 {"time": "2026-10-14T23:12:23", "agent": "qwen", "claim": "W08 regions.c: mapa de intervalos com split/merge; test_regions passa", "gate": "regions", "expect": "pass", "run_id": "6b20b91871", "verdict": "FALSE", "source": "gate"}
 {"time": "2026-10-14T23:13:26", "agent": "qwen", "claim": "W08 t2 regions.c: corrige clear/merge/capacidade; test_regions passa", "gate": "regions", "expect": "pass", "run_id": "4054feb2b8", "verdict": "true", "source": "gate"}
+{"time": "2026-10-14T23:38:29", "agent": "qwen", "claim": "W10: arbiter com CAS atômico e ordem de wake do Horizon; host compila", "gate": "host", "expect": "pass", "run_id": "c69e59be66", "verdict": "FALSE", "source": "gate"}
+{"time": "2026-10-14T23:39:51", "agent": "qwen", "claim": "W10 t2: arbiter_wake corrigido; host compila", "gate": "host", "expect": "pass", "run_id": "2736dae9ee", "verdict": "true", "source": "gate"}
+{"time": "2026-10-14T23:41:04", "agent": "qwen", "claim": "W10 t3: desempate FIFO; host compila", "gate": "host", "expect": "pass", "run_id": "dba9772cc8", "verdict": "true", "source": "gate"}
+{"time": "2026-10-14T23:41:25", "agent": "qwen", "claim": "W10 t3: desempate FIFO aplicado", "gate": null, "verdict": "FALSE", "source": "review", "evidence": "saída idêntica à t2: (it->prio == t->prio && !t) continua em kernel.c:497", "context": "W10"}

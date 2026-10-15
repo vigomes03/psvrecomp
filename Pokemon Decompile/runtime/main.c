@@ -84,6 +84,7 @@ int main(int argc, char **argv) {
     kernel_init();
     dispatch_init();
     { extern void setjmp_install(void); setjmp_install(); }  // guest longjmp -> host checkpoint (setjmp.c)
+    { extern void diag_install(void); diag_install(); }  // log nn::diag aborts with their strings (diag_log.c)
 
     uint32_t stack_size = 0x100000;
     int prio = 44;

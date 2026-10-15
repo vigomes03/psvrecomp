@@ -59,8 +59,15 @@ Ferramentas novas:
 
 Critério M2 (60 s de `present` sem FATAL), medido com `--min-stage frames_60,survived_time_limit --repeat 4`:
 - **base v1.0.0: atingido, 4 de 4** (`present #1024` em cada uma), run_id=977d5ee1c3;
-- **v4.0.0: 3 de 4** (run_id=1e0e69e1fc FAIL). A rodada 2 caiu com `c0000005 accessing 0x58` dentro do código do
-  jogo (main 0x700160be6c, chamado de 0x7000d2ff7c), depois de 512 frames. É o próximo item de estudo.
+- **v4.0.0: atingido, 6 de 6** (run_id=7adc0390c2). Base reconfirmada com 4 de 4 (run_id=db35401e31).
+  Causa das falhas aleatórias: o `runtime/diag_log.c` (log de abort) mostrou um Lua panic, "attempt to index a nil
+  value", numa coroutine de evento. A raiz é o address arbiter, que lia, modificava e gravava a memória do guest sem
+  atomicidade, concorrendo com o LDXR/STXR do jogo. O W09 (revisão feita pelo qwen contra o Eden) apontou o problema,
+  e o W10 (qwen, CAS como `DecrementIfLessThan`/`UpdateIfEqual` do Eden) o corrigiu.
+  Em aberto, severidade baixa: entre threads de mesma prioridade, o arbiter acorda a mais nova primeiro (LIFO);
+  o Horizon acorda a mais antiga (FIFO).
+
+**Fase 2 (M2) concluída nas duas versões** (v400 run_id=7adc0390c2, base run_id=db35401e31).
 Atenção: até 14/10, `frames_60` passava sem nenhum frame quando o jogo só sobrevivia até o limite de tempo. O
 `stage_ok` do gates.py corrige isso e tem teste.
 
