@@ -55,6 +55,10 @@ Ordem de trabalho:
   o objeto já estaria pronto). Logs: `lab/host-vk/stb3_3.run1.log`, `xs3.run1.log`, `stab_7.run1.log`,
   `stab_8.run1.log`. Adiado por decisão do [USER] (15/10).
 
+- **Personagem invisível no mundo aberto** (só a sombra): aparece no fade-in após carregar o save
+  `auto_pos_batalha_20261015` e some logo depois, parado ou andando, a 30 e a 60 fps. Não é do fix de FP nem do de
+  xfb (A/B feitos). Próximo passo: comparar a lista de draws de um frame com e sem o personagem.
+
 ## Marcos
 
 | Marco | Critério objetivo |

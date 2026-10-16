@@ -1386,6 +1386,62 @@ static const char *cc_flow_test(int ft) {
     return ft >= 0 && ft < 32 ? t[ft] : NULL;
 }
 
+// W21 (PVRecomp): TMML — qwen3-coder-64k t1, 3 fixes by Claude in review (13-bit index, float-bit coords, 1D)
+static void emit_tmml(Ctx *c, uint64_t w) {
+    if (!c->glsl) {
+        fail(c, "tmml msl");
+        return;
+    }
+    
+    int dest = bits(w, 0, 8);
+    int coord = bits(w, 8, 8);
+    int type = bits(w, 28, 3);
+    int mask = bits(w, 31, 4);
+    uint32_t index = (uint32_t)bits(w, 36, 13);  // (review: qwen used 11 bits)
+    
+    if (mask & 0xC) {
+        fail(c, "tmml mask %x", mask);
+        return;
+    }
+    
+    int array = 0;
+    int textype = -1;
+    char cs[4][64];  // (review: qwen built vec2(uint regs) = numeric conversion; the coords are float BITS)
+    for (int k = 0; k < 4; k++) {
+        if (coord == RZ || coord + k >= RZ) strcpy(cs[k], "0.0f");
+        else sprintf(cs[k], "uintBitsToFloat(%s)", R(coord + k));
+    }
+    char coord_str[256];
+    switch (type) {
+        case 0: textype = TEXTYPE_1D; array = 0; sprintf(coord_str, "%s", cs[0]); break;
+        case 1: textype = TEXTYPE_1D_ARRAY; array = 1; sprintf(coord_str, "%s", cs[1]); break;
+        case 2: textype = TEXTYPE_2D; array = 0; sprintf(coord_str, "vec2(%s, %s)", cs[0], cs[1]); break;
+        case 3: textype = TEXTYPE_2D_ARRAY; array = 1; sprintf(coord_str, "vec2(%s, %s)", cs[1], cs[2]); break;
+        case 4: textype = TEXTYPE_3D; array = 0; sprintf(coord_str, "vec3(%s, %s, %s)", cs[0], cs[1], cs[2]); break;
+        case 5: fail(c, "tmml 3d array"); return;
+        case 6: textype = TEXTYPE_CUBE; array = 0; sprintf(coord_str, "vec3(%s, %s, %s)", cs[0], cs[1], cs[2]); break;
+        default: textype = TEXTYPE_CUBE_ARRAY; array = 1; sprintf(coord_str, "vec3(%s, %s, %s)", cs[1], cs[2], cs[3]); break;
+    }
+    
+    bool shadow = c->tex_slot[index] ? c->info->tex[c->tex_slot[index] - 1].shadow : false;
+    int slot = tex_slot(c, index, textype, shadow, array);
+    
+    if (dest == RZ) return;
+    
+    sp(&c->body, "    { vec2 lod = textureQueryLod(t%d, %s);\n", slot, coord_str);
+    
+    int n = 0;
+    for (int i = 0; i < 2; i++) {
+        if (mask & (1u << i)) {
+            c->reg_used[dest + n] = 1;
+            sp(&c->body, "      r%d = uint(lod.%c) << 8u;\n", dest + n, 'x' + i);
+            n++;
+        }
+    }
+    
+    sp(&c->body, "    }\n");
+}
+
 static void emit_insn(Ctx *c, uint64_t w, uint32_t pc) {
     char t[2048], u[2048];
     int d = (int)bits(w, 0, 8), a = (int)bits(w, 8, 8);
@@ -1503,6 +1559,8 @@ static void emit_insn(Ctx *c, uint64_t w, uint32_t pc) {
         emit_tex(c, w, false);
     } else if (OPM(0xdeb8000000000000ull, 0xfff8000000000000ull)) {  // TEX.B (bindless)
         emit_tex(c, w, true);
+    } else if (OPM(0xdf58000000000000ull, 0xfff8000000000000ull)) {  // TMML (W21)
+        emit_tmml(c, w);
     } else if (OPM(0xdf48000000000000ull, 0xfff8000000000000ull)) {  // TXQ
         uint32_t index = (uint32_t)bits(w, 36, 13);
         int qt = (int)bits(w, 22, 6);
