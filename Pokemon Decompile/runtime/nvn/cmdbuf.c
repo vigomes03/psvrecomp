@@ -375,14 +375,37 @@ NVN(nvnCommandBufferDrawElementsBaseVertex) {
     r->x[5] = 0; r->x[6] = 1;
 }
 NVN(nvnCommandBufferDrawElementsInstanced) { trace_draw(c, c->x[3]); Snap s = snap(c); record(c, CMD_DRAW_ELEMENTS, 0, &s); }
-PLAIN(nvnCommandBufferDrawArraysIndirect, CMD_DRAW_ARRAYS_INDIRECT)
-PLAIN(nvnCommandBufferDrawElementsIndirect, CMD_DRAW_ELEMENTS_INDIRECT)
-NVN(nvnCommandBufferMultiDrawArraysIndirectCount) { (void)c; }
-NVN(nvnCommandBufferMultiDrawElementsIndirectCount) { (void)c; }
+// (PVRecomp, diag) indirect draws reach no backend yet: count them (PVR_DIAG_INDIRECT=1 logs args + guest words)
+static void diag_indirect(Cpu *c, const char *what, int buf_arg) {
+    static uint64_t n[4];
+    static int on = -1;
+    if (on < 0) on = getenv("PVR_DIAG_INDIRECT") != NULL;
+    int k = what[0] == 'A' ? 0 : what[0] == 'E' ? 1 : what[1] == 'A' ? 2 : 3;
+    n[k]++;
+    if ((n[k] & (n[k] - 1)) == 0 || n[k] % 256 == 0)
+        LOG("[indirect] %s #%llu (arrays %llu elems %llu multiA %llu multiE %llu)\n", what, (unsigned long long)n[k],
+            (unsigned long long)n[0], (unsigned long long)n[1], (unsigned long long)n[2], (unsigned long long)n[3]);
+    if (on && n[k] <= 6) {
+        const uint32_t *w = (const uint32_t *)(uintptr_t)c->x[buf_arg];
+        LOG("[indirect]   args %llx %llx %llx %llx %llx %llx %llx | buf words %u %u %u %u %u\n",
+            (unsigned long long)c->x[1], (unsigned long long)c->x[2], (unsigned long long)c->x[3],
+            (unsigned long long)c->x[4], (unsigned long long)c->x[5], (unsigned long long)c->x[6], (unsigned long long)c->x[7],
+            w ? w[0] : 0, w ? w[1] : 0, w ? w[2] : 0, w ? w[3] : 0, w ? w[4] : 0);
+    }
+}
+NVN(nvnCommandBufferDrawArraysIndirect) { diag_indirect(c, "Arrays", 2); Snap s = snap(c); record(c, CMD_DRAW_ARRAYS_INDIRECT, 0, &s); }
+NVN(nvnCommandBufferDrawElementsIndirect) { diag_indirect(c, "Elems", 4); Snap s = snap(c); record(c, CMD_DRAW_ELEMENTS_INDIRECT, 0, &s); }
+NVN(nvnCommandBufferMultiDrawArraysIndirectCount) { diag_indirect(c, "MA", 2); }
+NVN(nvnCommandBufferMultiDrawElementsIndirectCount) { diag_indirect(c, "ME", 4); }
 NVN(nvnCommandBufferDrawTransformFeedback) { static int n; if (n++ < 10) LOG("[xfb] DrawTransformFeedback not implemented (mode %d counter %llx)\n", (int)A(1), (unsigned long long)A(2)); }
 NVN(nvnCommandBufferDrawTexture) { (void)c; }
 PLAIN(nvnCommandBufferDispatchCompute, CMD_DISPATCH)
-PLAIN(nvnCommandBufferDispatchComputeIndirect, CMD_DISPATCH_INDIRECT)
+NVN(nvnCommandBufferDispatchComputeIndirect) {
+    static uint64_t n;
+    if ((n & (n + 1)) == 0) LOG("[indirect] DispatchComputeIndirect #%llu (no backend)\n", (unsigned long long)n + 1);
+    n++;
+    Snap s = snap(c); record(c, CMD_DISPATCH_INDIRECT, 0, &s);
+}
 PLAIN(nvnCommandBufferBeginTransformFeedback, CMD_XFB_BEGIN)  // (arg 1: counter buffer address)
 PLAIN(nvnCommandBufferEndTransformFeedback, CMD_XFB_END)  // (arg 1: counter buffer address)
 PLAIN(nvnCommandBufferPauseTransformFeedback, CMD_XFB_PAUSE)  // (arg 1: counter buffer address)

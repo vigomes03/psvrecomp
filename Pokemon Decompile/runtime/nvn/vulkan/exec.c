@@ -25,7 +25,7 @@ static uint64_t ft_exec_ns, ft_upload_bytes, ft_pending;
 static _Atomic uint64_t ft_compiles;
 #define SKIP(i) do { stat_skipped++; stat_skip_why[(i)]++; if ((i) == 0 || (i) == 3 || (i) == 8) ft_pending++; return; } while (0)
 static uint64_t stat_draws, stat_skipped, stat_passes, stat_dispatches, stat_wait_ns, stat_flushes, stat_feedback_copies;
-static uint64_t stat_upload_bytes;
+static uint64_t stat_upload_bytes; static uint64_t stat_indirect, stat_indirect_fail;  // (PVRecomp: indirect draws run / without a GPU buffer)
 // LARECOMP_VK_PROF=1: render-thread time per category in the fps log (exec = whole command lists, draw = draw(),
 // sets = descriptor sets incl. cbuf copies, vtx = index scan + vertex copies, submit = vkQueueSubmit2)
 static int prof = -1;
@@ -619,7 +619,9 @@ const char *renderer_stats(void) {
     }
     {
         size_t n = strlen(stats_text);
-        snprintf(stats_text + n, sizeof stats_text - n, " | skip why:");
+        snprintf(stats_text + n, sizeof stats_text - n, " | indirect %llu (fail %llu) | skip why:",
+                 (unsigned long long)stat_indirect, (unsigned long long)stat_indirect_fail);
+        stat_indirect = stat_indirect_fail = 0;
         for (int i = 0; i < 11; i++)
             if (stat_skip_why[i]) { n = strlen(stats_text); snprintf(stats_text + n, sizeof stats_text - n, " %s %llu", skip_why_name[i], (unsigned long long)stat_skip_why[i]); }
         memset(stat_skip_why, 0, sizeof stat_skip_why);
@@ -1649,7 +1651,8 @@ static bool host_import(uint64_t base, uint64_t size, VkBuffer *pbuf, VkDeviceMe
                                            .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT};
     VkBufferCreateInfo bi = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .pNext = &eb, .size = size,
                              .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-                                      VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT};
+                                      VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
+                                      VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT};  // (PVRecomp: GPU-culled indirect draws)
     VkBuffer buf;
     if (vkCreateBuffer(g_vk.dev, &bi, NULL, &buf) != VK_SUCCESS) { vkFreeMemory(g_vk.dev, mem, NULL); return false; }
     vkBindBufferMemory(g_vk.dev, buf, mem, 0);
@@ -2163,6 +2166,44 @@ static bool topology(uint32_t mode, VkPrimitiveTopology *t, uint8_t *cls) {
 }
 
 static void draw_(CmdRec *r, bool indexed);
+// (PVRecomp) Indirect draws: the game's static world command buffers (recorded once, ~800 DrawElementsIndirect,
+// replayed every frame) draw terrain detail, trees, rocks and bushes whose instance counts a culling compute writes
+// on the GPU. They used to be recorded and never executed. The arguments live in a guest GPU pool: the index count /
+// first index / base vertex the CPU wrote are read here to size the index and vertex ranges, and the draw itself is
+// vkCmdDraw(Indexed)Indirect on the imported window, so the GPU-written instance count is used. PVR_NO_INDIRECT=1:
+// the old behaviour (A/B).
+static struct { bool on; VkBuffer buf; VkDeviceSize off; } g_ind;
+static void draw(CmdRec *r, bool indexed);
+static void draw_indirect(CmdRec *r, bool indexed) {
+    static int off = -1;
+    if (off < 0) off = getenv("PVR_NO_INDIRECT") != NULL;
+    if (off) return;
+    uint64_t addr = indexed ? r->x[3] : r->x[1];
+    VkBuffer b; VkDeviceSize o;
+    if (!addr || (addr & 3) || !guest_direct(addr, indexed ? 20 : 16, &b, &o)) { stat_indirect_fail++; return; }
+    const uint32_t *w = (const uint32_t *)(uintptr_t)addr;  // {count, instances, first, (base vertex,) base instance}
+    CmdRec rr = *r;
+    if (indexed) {  // DrawElementsIndirect(cmd, mode, type, indexBuffer, indirectBuffer)
+        rr.x[0] = r->x[0]; rr.x[1] = r->x[1]; rr.x[2] = (uint64_t)w[0] + w[2]; rr.x[3] = r->x[2];
+        rr.x[4] = (uint64_t)(int64_t)(int32_t)w[3]; rr.x[5] = w[4]; rr.x[6] = 1;
+    } else {        // DrawArraysIndirect(cmd, mode, indirectBuffer)
+        rr.x[0] = r->x[0]; rr.x[1] = w[2]; rr.x[2] = w[0]; rr.x[3] = w[3]; rr.x[4] = 1;
+    }
+    g_ind.on = true; g_ind.buf = b; g_ind.off = o;
+    stat_indirect++;
+    if (getenv("PVR_DIAG_INDIRECT")) {  // (the instance count the GPU wrote last frame: is the culling keeping anything?)
+        static uint64_t zero, nz, inst_sum, seen;
+        if (w[1]) { nz++; inst_sum += w[1]; } else zero++;
+        if (++seen % 20000 == 0) {
+            LOG("[indirect] last %llu: instances 0 in %llu, >0 in %llu (avg %.1f)\n", 20000ull, (unsigned long long)zero,
+                (unsigned long long)nz, nz ? (double)inst_sum / nz : 0.0);
+            zero = nz = inst_sum = 0;
+        }
+    }
+    draw(&rr, indexed);
+    g_ind.on = false;
+}
+
 static void draw(CmdRec *r, bool indexed) {
     PROF_T0();
     draw_(r, indexed);
@@ -2322,6 +2363,7 @@ static void draw_(CmdRec *r, bool indexed) {
     uint8_t cls;
     bool native = topology(mode, &topo, &cls);
     if (!native && mode != 6 && mode != 7 && mode != 9) SKIP(7);
+    if (g_ind.on && !native) SKIP(7);  // (indirect: no CPU index expansion of quads / fans)
 
     uint64_t prof_tk_ = prof ? SDL_GetTicksNS() : 0;
     if (prof) prof_pre += prof_tk_ - prof_tp_;
@@ -2657,6 +2699,7 @@ static void draw_(CmdRec *r, bool indexed) {
             }
             uint64_t stride = k.stride[s], need;
             if (!stride) need = 256;
+            else if (k.divisor[s] && g_ind.on) need = v.size ? v.size : 256;  // (instance count on the GPU)
             else if (k.divisor[s]) need = ((uint64_t)base_inst + inst + k.divisor[s] - 1) / k.divisor[s] * stride + 256;
             else need = (uint64_t)max_index * stride + 256;
             if (v.size && need > v.size) need = v.size;
@@ -2700,7 +2743,9 @@ static void draw_(CmdRec *r, bool indexed) {
             VkDescriptorSet rset = stage_set(pr, pr->set_layout[1], 1, 1, pr->fi, rs0, rtint, 0, 0, 0, fii);
             vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pr->layout, 1, 1, &rset, 0, NULL);
         }
-        if (!use_index) vkCmdDraw(cb, count, run_n[ri], first, base_inst + run_at[ri]);
+        if (g_ind.on && !use_index) vkCmdDrawIndirect(cb, g_ind.buf, g_ind.off, 1, 16);
+        else if (g_ind.on) vkCmdDrawIndexedIndirect(cb, g_ind.buf, g_ind.off, 1, 20);
+        else if (!use_index) vkCmdDraw(cb, count, run_n[ri], first, base_inst + run_at[ri]);
         else vkCmdDrawIndexed(cb, icount, run_n[ri], 0, base_vertex, base_inst + run_at[ri]);
     }
     stat_draws++;
@@ -3561,6 +3606,8 @@ static void exec_list(uint64_t handle, int depth) {
         case CMD_DRAW_ARRAYS: draw(r, false); break;
         case CMD_XFB_BIND: case CMD_XFB_BEGIN: case CMD_XFB_END: case CMD_XFB_PAUSE: case CMD_XFB_RESUME: xfb_cmd(r->op, r); break;
         case CMD_DRAW_ELEMENTS: draw(r, true); break;
+        case CMD_DRAW_ELEMENTS_INDIRECT: draw_indirect(r, true); break;
+        case CMD_DRAW_ARRAYS_INDIRECT: draw_indirect(r, false); break;
         case CMD_UPDATE_UNIFORM_BUFFER:
             if (pvr_watch_hit(r->x[0] + r->x[2], r->x[3])) LOG("[watch] update ubo %llx +%llx size %llu\n", (unsigned long long)r->x[0], (unsigned long long)r->x[2], (unsigned long long)r->x[3]);
             memcpy((void *)(uintptr_t)(r->x[0] + r->x[2]), x, r->x[3]);

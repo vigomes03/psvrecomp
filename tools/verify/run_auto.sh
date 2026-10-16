@@ -10,7 +10,7 @@ set -u
 SECS=${1:-240}
 TAG=${2:-auto}
 shift 2 2>/dev/null || shift $#
-H=/d/Dev/REA/lab/host-vk
+H=${PVR_HOST_DIR:-/d/Dev/REA/lab/host-vk}  # (another build dir while [USER] plays from host-vk)
 export PATH="/d/msys64/ucrt64/bin:$PATH"
 export PVR_SYSFONT_DIR=${PVR_SYSFONT_DIR:-D:/Dev/REA/lab/sysfont}
 export PVR_DISPLAY=${PVR_DISPLAY:-2}  # (window on the 2nd monitor: [USER] works on the primary)
