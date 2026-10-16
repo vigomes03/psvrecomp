@@ -65,12 +65,12 @@ Ordem de trabalho (atualizada no fim de 15/10; 🟢 = provado por run_auto/teste
    terreno lia o mapa de materiais no ponto espelhado); draws indiretos passaram a ser executados. Falta: árvores no
    Poco Path (conferir após a correção), artefatos de iluminação — o [USER] indica o lugar e cria saves.
    Comparação com o Eden (referência, mesmo save, mesmo ponto; `lab/host-diag/ab_eden_big.png`, 16/10):
-   - [ ] **Árvores ausentes** (e com elas as sombras de copa nas rochas e no chão)
+   - [x] **Árvores ausentes** — corrigido 16/10 (S2R LANEID/LTMASK = 0 no append agregado por warp do culling da GPU)
    - [ ] **Imagem clara e lavada:** luminância média 140 vs 126 no Eden, contraste (desvio) 60 vs 70, saturação 88 vs 95.
      Suspeitos: exposição automática (histograma), curva de tonemapping/color grading
    - [ ] **Sombras sem o tom azulado** do céu: no Eden as áreas na sombra puxam para o azul (luz ambiente/céu)
    - [ ] **Pouca oclusão de contato** na base da grama e das moitas (o Eden escurece o pé da vegetação)
-   - [ ] Moitas menos densas perto da placa (pode ser o mesmo caso das árvores: draws indiretos com 0 instâncias)
+   - [x] Moitas menos densas perto da placa — mesma causa das árvores, corrigido 16/10
 6. 🟢 **Áudio (5.1):** corrigido 16/10 (o build de janela usava o dispositivo de áudio falso do headless); o jogo toca pelo audout. **Confirmado pelo [USER]** (ouviu na janela, 16/10).
 7. 🟢 **Teclado do nome (5.6, swkbd):** caixa de texto na frente do jogo, no monitor do jogo + resposta em UTF-16 (o Violet não usa UTF-8). **Confirmado pelo [USER]:** digitou "Lokiju" e a ficha mostra o nome e a foto (16/10).
 8. ✅ **Gate `window`:** `gates.py run window` (jogo novo, 30 fps, sem crash, telas renderizadas, cena avança) — run_id=312d34de1a.

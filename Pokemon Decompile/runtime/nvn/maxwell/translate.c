@@ -1986,7 +1986,15 @@ static void emit_insn(Ctx *c, uint64_t w, uint32_t pc) {
         case 0x25: set_reg(c, d, "ctaid.x"); break;
         case 0x26: set_reg(c, d, "ctaid.y"); break;
         case 0x27: set_reg(c, d, "ctaid.z"); break;
-        case 0x00: set_reg(c, d, "0u"); break;
+        // (PVRecomp) lane id and lane masks (yuzu/eden move_special_register.cpp). They were 0: the warp-aggregated
+        // append in Violet's GPU culling (VOTE.ballot -> POPC(ballot & LTMASK) = slot inside the warp) gave every lane
+        // the same slot, so the instance lists for trees and other indirect draws kept one entry per warp (16/10).
+        case 0x00: set_reg(c, d, c->glsl ? "gl_SubgroupInvocationID" : "0u"); break;
+        case 0x38: set_reg(c, d, c->glsl ? "gl_SubgroupEqMask.x" : "0u"); break;
+        case 0x39: set_reg(c, d, c->glsl ? "gl_SubgroupLtMask.x" : "0u"); break;
+        case 0x3a: set_reg(c, d, c->glsl ? "gl_SubgroupLeMask.x" : "0u"); break;
+        case 0x3b: set_reg(c, d, c->glsl ? "gl_SubgroupGtMask.x" : "0u"); break;
+        case 0x3c: set_reg(c, d, c->glsl ? "gl_SubgroupGeMask.x" : "0u"); break;
         default: sprintf(t, "0u /* sr %#x */", sr); set_reg(c, d, t);
         }
     } else if (OPM(0x5c30000000000000ull, 0xfff8000000000000ull) || OPM(0x4c30000000000000ull, 0xfff8000000000000ull) ||
