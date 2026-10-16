@@ -19,7 +19,7 @@ Base técnica: [estudo-lasrecomp.md](../estudo-lasrecomp.md) (como o Zelda foi f
 | 3 | [Sistema de arquivos e dados](fase-3-arquivos.md) | o jogo lê o romfs (base + patch) e os arquivos `trpfs` sozinho | `services/fs.c`, `romfs_build.c` | 🟢 na prática: o jogo carrega tudo do romfs; **save persistente** (fecha, reabre e carrega) — teste manual do [USER], 15/10 |
 | 4 | [Gráficos: NVN → Vulkan](fase-4-graficos.md) | **primeiro frame**: logo / tela de título renderizada | `runtime/nvn/*`, `maxwell/translate.c`, `vulkan/` | 🟢 **M3/M4** atingidos no teste manual (nota 95/100); faltam artefatos de iluminação, skybox com linhas, objetos não renderizados, gate `window` |
 | 5 | [Áudio, input, save, tempo](fase-5-sistemas.md) | controle funciona, som toca, save grava/carrega | `services/audio.c`, `hle/input.c`, `fs.c` (save) | 🟡 input e save ok; **áudio: silêncio total**; **teclado do nome (swkbd) ausente** |
-| 6 | [Jogável](fase-6-jogavel.md) | começar um jogo novo e andar pelo mapa aberto | ciclo shot.sh + correções | 🟡 **M5** e **M6 parcial** no teste manual (intro e começo da história, >10 min sem crash); bloqueios: **crash na 1ª batalha**, **5-10 fps (≈3 fps em área aberta)** |
+| 6 | [Jogável](fase-6-jogavel.md) | começar um jogo novo e andar pelo mapa aberto | ciclo shot.sh + correções | 🟡 **M5** e **M6 parcial** no teste manual (intro, começo da história, 1ª batalha); 30 fps com clock fixo; 60 fps experimental; falta fluidez (engasgos) e o crash raro conhecido |
 | 7 | [Ferramentas de RE e debug](fase-7-ferramentas-re.md) | (contínua) fnprof, ganchos `PVR_*`, screenshot automático, REA/Ghidra | `fnprof.c`, `LARECOMP_*`, `sym.py`, `shot.sh` | 🟢 contínua: kit `PVR_*`, `glsl_slice.py`, `run_auto.sh`, gates; **falta log/aviso de crash** |
 | 8 | [O aplicativo](fase-8-aplicativo.md) | launcher, menu overlay, resolução/FPS desbloqueados, recursos nossos | `ui/launcher.mm`, `menu.mm`, `hle/widescreen.c` | 🟡 nome **PSV Recomp**, `psvrecomp.ini`, `run_window.cmd` |
 | 9 | [Entender o jogo (estudo AAA)](fase-9-estudo-aaa.md) | documentação de motor, formatos, sistemas de jogo | (não existe no LAS: é o nosso objetivo de estudo) | ⬜ contínua |
@@ -34,17 +34,39 @@ Marcos: M0-M2 provados por gate. **M3, M4, M5** atingidos e **M6 parcial** pelo 
 logo até o começo da história, mais de 10 min sem crash, save persistente; o gate automático `window` fica como item
 próprio para formalizá-los.
 
-Ordem de trabalho:
-1. 🧠 **Crash da 1ª batalha** (1.7): `FATAL: no function at 7000cedb00 (lr=7000cedadc)` — salto indireto para um
-   endereço que o recompilador não reconheceu como função. Repro: carregar o save do [USER] → A na batalha.
-   Log: `lab/host-vk/crash_batalha_20261015.log`.
-2. 🧠 **Desempenho (6.6), com urgência logo depois:** 5-10 fps em interior, ≈3 fps em área aberta, CPU ~9 % e GPU
-   ociosa = gargalo de sincronização (~60 mil flushes CPU↔GPU por rodada). Meta: 30 fps em interior.
-3. 🧠 **Log e aviso de crash (7.x):** caixa de erro com a mensagem e o log salvo sozinho; hoje o jogo só fecha.
-4. **Visual:** skybox com linhas, artefatos de iluminação, objetos sem render. O [USER] indica o lugar e cria saves.
-5. **Áudio (5.1):** hoje silêncio total.
-6. **Teclado do nome (5.6, swkbd):** hoje o jogo usa um nome padrão (`?瑱?` na ficha).
-7. **Gate `window`:** screenshot automático no frame N para formalizar M3-M5.
+Ordem de trabalho (atualizada no fim de 15/10; 🟢 = provado por run_auto/teste do [USER], sem gate):
+1. 🟢 **Crash da 1ª batalha** (1.7): jump table mal resolvida no gen.py — corrigido (commit 28c44eb); a batalha roda.
+2. 🟢 **Desempenho (6.6)** — os 3 objetivos do [USER]:
+   - 🟢 **Clock fixo:** o jogo pede intervalo 2 (30 fps) e o limitador `runtime/framepace.c` respeita; menu/loading
+     não aceleram mais (commit 0ad8fe3).
+   - 🟢 **30 fps:** batalha 9 → 28 fps (FP do mingw), depois 46-48 fps sem limitador (transform feedback em VRAM);
+     mundo aberto parado 54-63 sem limitador. Personagem invisível no mundo aberto corrigido (occlusion query).
+   - 🧪 **60 fps:** `PVR_GAME60=1` liga o modo 60 do próprio jogo com a velocidade certa (só v4.0.0, experimental).
+     Falta: opção no menu/`psvrecomp.ini`, teste longo de sincronia (animações, cutscenes).
+   - **Regra de teste ([USER], 15/10): daqui em diante tudo é testado a 30 fps** (limitador ligado, sem
+     `PVR_FRAMEPACE=0` / `PVR_GAME60`), salvo medição de folga pedida explicitamente.
+3. 🧠 **Fluidez / consistência (6.8, próxima fase de desempenho)** — o [USER] ainda sente engasgos e frame times
+   irregulares. Em ordem:
+   1. **Medição** por frame: tempo de cada frame, 1% low, quantos picos e a causa de cada um (compilação de shader,
+      upload de textura, espera de GPU, jogo). Sem isso qualquer correção é chute.
+   2. **Compilação de shader durante o jogo:** `compiles N pending` e draws pulados em áreas novas → pré-compilar
+      (no carregamento / offline) ou pipeline libraries.
+   3. **Upload de texturas:** ~200 MB a cada 2 s re-checados/re-enviados → rastrear páginas escritas (proteção de
+      memória) em vez de comparar tudo.
+   4. **Pontos de sincronia CPU↔GPU:** cópia buffer→buffer e leituras de imagem pela CPU forçam flush + espera.
+   5. **Ritmo de apresentação vs monitor:** o limitador usa timer, não o refresh do monitor → alternância de 2/3
+     refreshes por frame em 60/144 Hz. Apresentar sincronizado ou VRR.
+   6. **Código recompilado:** ~7 % ainda no caminho lento de FP; FN_ENTER em toda função; dispatch indireto.
+   7. **Memória:** dados que a GPU lê (vértices, constantes) moram na RAM e são lidos via PCIe; cópias em VRAM
+      dos mais usados.
+4. 🧠 **Log e aviso de crash (7.x):** caixa de erro com a mensagem e o log salvo sozinho; hoje o jogo só fecha.
+5. **Visual:** skybox com linhas, artefatos de iluminação, objetos sem render. O [USER] indica o lugar e cria saves.
+6. **Áudio (5.1):** hoje silêncio total.
+7. **Teclado do nome (5.6, swkbd):** hoje o jogo usa um nome padrão (`?瑱?` na ficha).
+8. **Gate `window`:** screenshot automático no frame N para formalizar M3-M5.
+9. **Fidelidade (futuro, depois da fluidez):** resolução 1440p/4K (a base do LAS já tem escala de render; faltam
+   cópias para a CPU de imagens escaladas e efeitos com pixel fixo; medir VRAM), anti-aliasing (há SMAA no código
+   herdado — conferir se está ligado e qual AA o jogo usa), filtro anisotrópico.
 
 ## Problemas conhecidos (para caçar depois)
 

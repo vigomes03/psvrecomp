@@ -14,9 +14,12 @@ temporária, screenshots comparados; correção bug a bug, com comentário expli
   ~30 FPS com quedas; meta inicial: 30 FPS estáveis, depois desbloquear (fase 8).
 - [ ] 6.5 🧠 Estabilidade: 10 min de exploração sem crash (roteiro + aleatório).
 
-- [ ] 6.6 🧠 **Desempenho (urgente):** 5-10 fps em interior, ≈3 fps em área aberta, CPU ~9 %, GPU ociosa. O log mostra
+- [ ] 6.6 🟢 **Desempenho (urgente) — 30 fps atingido 15/10 (run_auto, sem gate):** 5-10 fps em interior, ≈3 fps em área aberta, CPU ~9 %, GPU ociosa. O log mostra
   ~60 mil flushes CPU↔GPU por rodada (cada lista de comandos enviada e esperada uma a uma). Meta: 30 fps em interior.
-- [ ] 6.7 🧠 Crash da 1ª batalha (ver fase 1, item 1.7).
+- [ ] 6.7 🟢 Crash da 1ª batalha (ver fase 1, item 1.7): corrigido, provado por run_auto (4365 frames) e pelo [USER]; sem gate.
+- [ ] 6.8 🧠 **Fluidez:** medição por frame (1% low, causa dos picos) → shaders pré-compilados → rastreio de escrita de
+  texturas → menos sincronia CPU↔GPU → ritmo de apresentação pelo monitor. Testes sempre a 30 fps.
+- [ ] 6.9 60 fps (`PVR_GAME60`): opção no menu/ini, endereço por versão, teste longo de sincronia.
 
 ## Estado em 15/10 (revisão com o [USER])
 - 🟢 **M5 atingido e M6 parcial** no teste manual: intro e começo da história, mais de 10 min sem crash, save ok.
