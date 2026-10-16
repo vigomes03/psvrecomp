@@ -20,7 +20,10 @@
 static uint64_t stat_skip_why[11];
 static const char *const skip_why_name[11] = {"cs_pending", "cs_failed", "no_program", "prog_pending", "prog_failed",
     "env_fshash", "pot_level", "topology", "pipe_pending", "pipe_failed", "item_cursor"};
-#define SKIP(i) do { stat_skipped++; stat_skip_why[(i)]++; return; } while (0)
+// (PVRecomp) frame-time recorder counters (runtime/frametime.c via renderer_frame_counters): cumulative, never reset
+static uint64_t ft_exec_ns, ft_upload_bytes, ft_pending;
+static _Atomic uint64_t ft_compiles;
+#define SKIP(i) do { stat_skipped++; stat_skip_why[(i)]++; if ((i) == 0 || (i) == 3 || (i) == 8) ft_pending++; return; } while (0)
 static uint64_t stat_draws, stat_skipped, stat_passes, stat_dispatches, stat_wait_ns, stat_flushes, stat_feedback_copies;
 static uint64_t stat_upload_bytes;
 // LARECOMP_VK_PROF=1: render-thread time per category in the fps log (exec = whole command lists, draw = draw(),
@@ -357,7 +360,7 @@ VkSpan vk_transient(uint64_t size, uint64_t align) {
         if (off + size <= c->size) {
             c->used = off + size;
             c->seq = pending;
-            stat_upload_bytes += size;
+            stat_upload_bytes += size; ft_upload_bytes += size;
             return (VkSpan){c->buf, off, c->ptr + off};
         }
     }
@@ -369,7 +372,7 @@ VkSpan vk_transient(uint64_t size, uint64_t align) {
     active = pick;
     chunks[pick].used = size;
     chunks[pick].seq = pending;
-    stat_upload_bytes += size;
+    stat_upload_bytes += size; ft_upload_bytes += size;
     return (VkSpan){chunks[pick].buf, 0, chunks[pick].ptr};
 }
 
@@ -1055,7 +1058,7 @@ static void compile_program(void *arg) {
     free(sv);
     free(sf);
     p->layout = make_layout(p, 2, VK_SHADER_STAGE_VERTEX_BIT, VK_SHADER_STAGE_FRAGMENT_BIT);
-    atomic_fetch_add(&stat_compiles, 1);
+    atomic_fetch_add(&stat_compiles, 1); atomic_fetch_add(&ft_compiles, 1);
     atomic_store(&p->state, p->vs && p->fs ? 1 : 2);
 }
 
@@ -1405,7 +1408,7 @@ static void build_pipeline(void *arg) {
         static int n;
         if (n++ < 10) LOG("[vk] pipeline creation failed: %d\n", r);
     }
-    atomic_fetch_add(&stat_compiles, 1);
+    atomic_fetch_add(&stat_compiles, 1); atomic_fetch_add(&ft_compiles, 1);
     atomic_store(&pp->state, r == VK_SUCCESS ? 1 : 2);
 }
 
@@ -2064,7 +2067,7 @@ static void build_compute(void *arg) {
                                                 .pSpecializationInfo = &spec},
                                       .layout = cp->p.layout};
     VkResult r = vkCreateComputePipelines(g_vk.dev, g_vk.pcache, 1, &ci, NULL, &cp->pipe);
-    atomic_fetch_add(&stat_compiles, 1);
+    atomic_fetch_add(&stat_compiles, 1); atomic_fetch_add(&ft_compiles, 1);
     atomic_store(&cp->p.state, r == VK_SUCCESS ? 1 : 2);
     if (r != VK_SUCCESS) LOG("[compute] pipeline failed: %d\n", r);
 }
@@ -3609,9 +3612,15 @@ static void exec_list(uint64_t handle, int depth) {
     }
 }
 
+void renderer_frame_counters(uint64_t out[5]) {
+    out[0] = ft_exec_ns; out[1] = cum_wait; out[2] = ft_upload_bytes; out[3] = atomic_load(&ft_compiles); out[4] = ft_pending;
+}
+
 void backend_execute(uint64_t handle) {
     PROF_T0();
+    uint64_t ft_t0 = SDL_GetTicksNS();
     exec_list(handle, 0);
+    ft_exec_ns += SDL_GetTicksNS() - ft_t0;
     PROF_ADD(prof_exec);
     if (prof) cum_exec += SDL_GetTicksNS() - prof_t0_;
     static int sync_submit = -1, per_list = -1;

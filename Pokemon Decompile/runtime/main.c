@@ -78,6 +78,7 @@ static DWORD WINAPI run_limit_thread(LPVOID p) {  // window mode: end the run af
     Sleep((DWORD)*(int *)p * 1000);
     LOG("[pvhost] time limit reached, exiting\n");
     if (getenv("PVR_DUMP_THREADS")) { extern void kernel_dump_threads(void); kernel_dump_threads(); }
+    { extern void frametime_final(void); frametime_final(); }  // (TerminateProcess skips atexit)
     plat_terminate();
     return 0;
 }
@@ -139,6 +140,7 @@ int main(int argc, char **argv) {
     Sleep((DWORD)secs * 1000);
     LOG("[pvhost] time limit reached, exiting\n");
     if (getenv("PVR_DUMP_THREADS")) { extern void kernel_dump_threads(void); kernel_dump_threads(); }
+    { extern void frametime_final(void); frametime_final(); }  // (TerminateProcess skips atexit)
     plat_terminate();
     return 0;
 }

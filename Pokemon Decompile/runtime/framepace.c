@@ -7,11 +7,14 @@
 //   PVR_FPS_CAP=<fps>     use this rate instead of 60/interval (experiments: goal 3, 60 fps)
 // A frame that comes in late is not "caught up" with shorter later frames: the schedule restarts from it, as the
 // hardware does (a late present lands on the next vsync).
+// Every present also feeds the frame-time recorder (runtime/frametime.c).
 #include <stdint.h>
 #include <stdlib.h>
 
 #include "platform.h"
 #include "rt.h"
+
+void frametime_frame(uint64_t sleep_ns, uint64_t period_ns);  // runtime/frametime.c
 
 void framepace_present(int interval) {
     static int on = -1;
@@ -27,14 +30,20 @@ void framepace_present(int interval) {
         LOG("[framepace] present interval %d (%s)\n", interval, on ? "paced" : "PVR_FRAMEPACE=0: not paced");
         last_interval = interval;
     }
-    if (!on || (interval <= 0 && !fixed_period)) return;
+    if (!on || (interval <= 0 && !fixed_period)) {
+        frametime_frame(0, 0);
+        return;
+    }
     uint64_t period = fixed_period ? fixed_period : (uint64_t)interval * 16666667ull;
     static uint64_t next;  // earliest time for this present
-    uint64_t now = plat_now_ns();
+    uint64_t now = plat_now_ns(), slept = 0;
     if (next && now < next) {
         plat_sleep_until_ns(next);
-        now = plat_now_ns();
+        uint64_t t = plat_now_ns();
+        slept = t - now;
+        now = t;
     }
     // on time: keep the grid (no drift); more than half a period late: restart the grid from now
     next = (next && now < next + period / 2 ? next : now) + period;
+    frametime_frame(slept, period);
 }
