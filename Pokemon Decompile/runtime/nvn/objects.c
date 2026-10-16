@@ -675,6 +675,7 @@ NVN(nvnProgramSetShaders) { set_shaders(c, 16); }    // NVNshaderData {data, con
 NVN(nvnProgramSetShadersExt) { set_shaders(c, 24); } // NVNshaderDataExt {data, control, debug hash}
 
 // ================================================================== window
+static int forced_interval(void);  // (below)
 // WindowBuilder: device@0 native@8 num@0x10 textures@0x18 interval@0x20 active@0x24
 NVN(nvnWindowBuilderSetDevice) { G(uint64_t, A(0), 0) = A(1); }
 NVN(nvnWindowBuilderSetDefaults) { memset(AP(0) + 8, 0, 0x20); G(uint32_t, A(0), 0x20) = 1; }
@@ -698,6 +699,8 @@ NVN(nvnWindowInitialize) {
     if (w->num > 8) w->num = 8;
     memcpy(w->textures, (void *)(uintptr_t)G(uint64_t, A(1), 0x18), w->num * 8);
     w->interval = (int)G(uint32_t, A(1), 0x20);
+    LOG("[nvn] window builder present interval %d\n", w->interval);
+    if (forced_interval()) w->interval = forced_interval();
     w->active = G(uint32_t, A(1), 0x24) ? (int)G(uint32_t, A(1), 0x24) : w->num;
     SET_HOST(A(0), w);
     LOG("[nvn] window with %d textures\n", w->num);
@@ -710,8 +713,33 @@ NVN(nvnWindowGetNativeWindow) { RET(0); }
 NVN(nvnWindowGetNumTextures) { RET(WIN->num); }
 NVN(nvnWindowGetNumActiveTextures) { RET(WIN->active); }
 NVN(nvnWindowSetNumActiveTextures) { WIN->active = (int)A(1); }
-NVN(nvnWindowGetPresentInterval) { RET(WIN->interval); }
-NVN(nvnWindowSetPresentInterval) { WIN->interval = (int)A(1); }
+// (PVRecomp) PVR_FORCE_INTERVAL=<n>: the game sees/gets interval n (60 fps experiments: does it derive its time step
+// from the interval?). Calls are logged (first few, with the caller) to find who reads it.
+static int forced_interval(void) {
+    static int f = -1;
+    if (f < 0) f = getenv("PVR_FORCE_INTERVAL") ? atoi(getenv("PVR_FORCE_INTERVAL")) : 0;
+    return f;
+}
+NVN(nvnWindowGetPresentInterval) {
+    static int n;
+    if (n++ < 8) LOG("[nvn] WindowGetPresentInterval -> %d (lr %llx)\n", WIN->interval, (unsigned long long)c->x[30]);
+    RET(WIN->interval);
+}
+NVN(nvnWindowSetPresentInterval) {
+    static int n;
+    if (n++ < 8) LOG("[nvn] WindowSetPresentInterval %d (lr %llx)\n", (int)A(1), (unsigned long long)c->x[30]);
+    // (PVRecomp, EXPERIMENT, v4.0.0 only) PVR_GAME60=1: Violet's frame-rate setting. The caller (v400 0x7002b7a898)
+    // computes interval = cfg->interval_minus_1 + 1 with cfg = *(x19 + 0x30), byte +0x20 (= 1: 30 fps), +0x21 = dynamic
+    // mode (picks 1..3 from the measured frame time vs 16.67 / 33.33 ms). Write 0 there: the game's own 60 fps mode.
+    if (c->x[30] == 0x7002b7a898ull && getenv("PVR_GAME60")) {
+        uint64_t cfg = *(uint64_t *)(uintptr_t)(c->x[19] + 0x30);
+        static int nl;
+        if (nl++ < 3) LOG("[game60] cfg %llx: interval-1 %d dynamic %d -> 0\n", (unsigned long long)cfg,
+                          *(int8_t *)(uintptr_t)(cfg + 0x20), *(uint8_t *)(uintptr_t)(cfg + 0x21));
+        *(int8_t *)(uintptr_t)(cfg + 0x20) = 0;
+    }
+    WIN->interval = forced_interval() ? forced_interval() : (int)A(1);
+}
 NVN(nvnWindowSetCrop) { int *cr = WIN->crop; cr[0] = (int)A(1); cr[1] = (int)A(2); cr[2] = (int)A(3); cr[3] = (int)A(4); }
 NVN(nvnWindowGetCrop) { memcpy(AP(1), WIN->crop, 16); }
 NVN(nvnWindowAcquireTexture) {

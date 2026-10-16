@@ -49,6 +49,8 @@ python tools/verify/gates.py run host --version v400
 | `PVR_NVN_MISSING` `PVR_DIAG_UNKNOWN` `PVR_DUMP_THREADS` `PVR_SYM_AT` | funções NVN faltantes, instruções Maxwell desconhecidas, threads, símbolos |
 | `PVR_CPUPROF=<de_s>:<até_s>` | amostra a CPU das threads do jogo (~1 ms) e grava `build/cpuprof.txt`; relatório: `tools/rea/cpuprof_report.py build/cpuprof.txt pvgame.dll pvhost.exe` |
 | `LARECOMP_VK_PROF=1` | tempo do render thread por categoria, GPU ocupada e esperas na GPU por local (`waits by site`, RVA para `addr2line`) |
+| `PVR_GAME60=1` | (experimental, só v4.0.0) liga o modo 60 fps do próprio jogo: zera o byte "intervalo-1" da config de vídeo (lido por 0x7002b7a898); a velocidade fica certa (teste de caminhada igual ao de 30 fps) |
+| `PVR_FORCE_INTERVAL=<n>` | (experimento) o NVN guarda o intervalo n no lugar do pedido pelo jogo |
 | `PVR_FRAMEPACE=0` / `PVR_FPS_CAP=<fps>` | desliga o limitador de apresentação (o jogo acelera em cenas leves) / usa outra taxa no lugar de 60/intervalo (o Violet pede intervalo 2 = 30 fps) |
 | `PVR_XFB_SCRATCH=0` / `PVR_XFB_OWN_PASS=0` | A/B: transform feedback (personagens) volta a escrever direto na memória do guest / no passe normal |
 | `PVR_SUBMIT=list` | A/B: uma submissão por lista de comandos (o padrão segue o NVN: envia no Flush/Finish/present) |
