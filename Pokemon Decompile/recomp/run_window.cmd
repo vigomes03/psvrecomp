@@ -32,5 +32,7 @@ if not exist "%HOSTDIR%\pvgame.dll" (
 cd /d "%HOSTDIR%"
 echo log: %HOSTDIR%\window.log
 pvhost.exe "D:/Dev/REA/dumps/%VER%/exefs" "D:/Dev/REA/dumps/%VER%/romfs" > window.log 2>&1
-echo exit=%ERRORLEVEL%
+set "PVR_EXIT=%ERRORLEVEL%"
+echo exit=%PVR_EXIT%
+if not "%PVR_EXIT%"=="0" if exist "%HOSTDIR%\crashes" echo crash logs: %HOSTDIR%\crashes  (newest = this run; read it with tools\rea\crash_report.py)
 endlocal
