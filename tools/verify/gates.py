@@ -340,7 +340,61 @@ def g_regions(g, a):
     g.check("test prints W08 PASS", code == 0 and "W08 PASS" in o, o.strip()[-500:])
 
 
-GATES = {"dumps": g_dumps, "host": g_host, "link": g_link, "boot": g_boot, "simd": g_simd, "excl_pair": g_excl_pair, "nvn_null": g_nvn_null, "sdl_null": g_sdl_null, "pl": g_pl, "cmdbuf_split": g_cmdbuf_split, "regions": g_regions}
+def g_window(g, a):
+    """M3-M5 in the window build (lab/host-vk: Vulkan, v4.0.0, paced at the game's 30 fps): a NEW game from an empty
+    save with run_auto.sh's scripted input (A every second). Checks, all on the first try (no crash retries):
+      no FATAL / host exception; presented frames ~ 30 fps over the run; screenshots are rendered scenes (lit, many
+      colours: M3 first frame / M4 3D); the scene changes during the run (the game advances with the input: M5);
+      the last 10 s frametime windows hold >= 27 fps."""
+    sys.path.insert(0, str(ROOT / "tools" / "verify"))
+    import frame_stats
+    H = LAB / "host-vk"
+    secs = max(a.seconds, 60)
+    save = H / "save_gate"
+    shutil.rmtree(save, ignore_errors=True)
+    save.mkdir(parents=True)
+    env = dict(os.environ)
+    for k in ("PVR_FRAMEPACE", "PVR_FPS_CAP", "PVR_GAME60", "SAVE_SEED", "PVR_INPUT", "PVR_AUTOPRESS", "PVR_TEST_CRASH"):
+        env.pop(k, None)  # (30 fps, default input, nothing provoked)
+    env.update(LARECOMP_SAVE_DIR=mpath(save), LARECOMP_SCREENSHOT_EVERY="150", LARECOMP_SCREENSHOT_FROM="150")
+    code, out = sh(f"bash tools/verify/run_auto.sh {secs} gate_window", cwd=ROOT, env=env, timeout=secs * 4 + 900)
+    g.out += out
+    log_p = H / "gate_window.log"
+    if not g.check("gate_window.log written by this run", log_p.exists()):
+        return
+    g.artifact(log_p)
+    log = log_p.read_text(encoding="utf-8", errors="replace")
+    g.check("first try without crash (run 1: bad=0)", "run 1: bad=0" in out, out.strip().splitlines()[0] if out.strip() else "")
+    fatal = re.search(r"^FATAL: .*$", log, re.M)
+    exc = re.search(r"^\*\*\* exception .*$", log, re.M)
+    g.check("no FATAL", fatal is None, fatal.group(0) if fatal else "")
+    g.check("no host exception", exc is None, exc.group(0) if exc else "")
+    frames = [int(x) for x in re.findall(r"\[vk\] t=[0-9.]+ frame (\d+)", log)]
+    last = frames[-1] if frames else 0
+    need = int(30 * (secs - 15) * 0.8)
+    g.check(f"presented >= {need} frames (30 fps pacing)", last >= need, f"last frame {last}")
+    pngs = sorted((H / "build" / "frames").glob("frame_*.png"))
+    st = []
+    for f in pngs:
+        try:
+            st.append((f.name, frame_stats.stats(str(f))))
+        except Exception as e:  # noqa: BLE001 (a truncated PNG at the time limit)
+            g.info.setdefault("unreadable", []).append(f"{f.name}: {e}")
+    rendered = [(n, d) for n, d in st if d["lit"] > 0.9 and d["uniq"] >= 500]
+    g.info.update(screenshots=len(st), rendered=len(rendered), frame_stats={n: d for n, d in st})
+    g.check("M3/M4: >= 3 screenshots are rendered scenes (lit > 0.9, >= 500 colours)", len(rendered) >= 3,
+            f"{len(rendered)}/{len(st)}")
+    changes = sum(1 for (_, x), (_, y) in zip(st, st[1:]) if abs(x["mean"] - y["mean"]) > 5 or abs(x["uniq"] - y["uniq"]) > 200)
+    g.check("M5: the scene changes during the run (game advances with input)", changes >= 2, f"{changes} changes")
+    wins = [float(x) for x in re.findall(r"\[frametime\] \d+ s: \d+ frames, avg [0-9.]+ ms \(([0-9.]+) fps\)", log)]
+    tail = wins[-2:]
+    g.info.update(frametime_windows_fps=wins)
+    g.check("last 10 s frametime windows >= 27 fps", len(tail) == 2 and min(tail) >= 27, f"{tail}")
+    for f in rendered[:2] + rendered[-1:]:
+        g.artifact(H / "build" / "frames" / f[0])
+
+
+GATES = {"window": g_window, "dumps": g_dumps, "host": g_host, "link": g_link, "boot": g_boot, "simd": g_simd, "excl_pair": g_excl_pair, "nvn_null": g_nvn_null, "sdl_null": g_sdl_null, "pl": g_pl, "cmdbuf_split": g_cmdbuf_split, "regions": g_regions}
 
 
 def run_gate(name, a):

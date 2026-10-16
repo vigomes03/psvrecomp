@@ -64,7 +64,7 @@ Ordem de trabalho (atualizada no fim de 15/10; 🟢 = provado por run_auto/teste
 5. **Visual:** skybox com linhas, artefatos de iluminação, objetos sem render. O [USER] indica o lugar e cria saves.
 6. 🟢 **Áudio (5.1):** corrigido 16/10 (o build de janela usava o dispositivo de áudio falso do headless); o jogo toca pelo audout. Falta o [USER] ouvir na janela.
 7. 🟢 **Teclado do nome (5.6, swkbd):** caixa de texto na frente do jogo + resposta em UTF-16 (o Violet não usa UTF-8) (16/10; falta o [USER] ver o nome na ficha).
-8. **Gate `window`:** screenshot automático no frame N para formalizar M3-M5.
+8. ✅ **Gate `window`:** `gates.py run window` (jogo novo, 30 fps, sem crash, telas renderizadas, cena avança) — run_id=312d34de1a.
 9. **Fidelidade (futuro, depois da fluidez):** resolução 1440p/4K (a base do LAS já tem escala de render; faltam
    cópias para a CPU de imagens escaladas e efeitos com pixel fixo; medir VRAM), anti-aliasing (há SMAA no código
    herdado — conferir se está ligado e qual AA o jogo usa), filtro anisotrópico.
@@ -82,16 +82,16 @@ Ordem de trabalho (atualizada no fim de 15/10; 🟢 = provado por run_auto/teste
 
 ## Marcos
 
-| Marco | Critério objetivo |
-|---|---|
-| M0 Dump pronto | `dumps/base/exefs/main` e `dumps/update/exefs/main` existem; build ids anotados; romfs listado |
-| M1 "Compila" | `generated/main/*.c` + `sdk` compilam e linkam numa DLL; 0 `rt_udf` por instrução não suportada (ou lista justificada) |
-| M2 "Respira" | log mostra o jogo criando threads, abrindo serviços e entrando no loop de frames (headless) |
-| M3 "Primeiro pixel" | screenshot automático mostra o logo da Game Freak / The Pokémon Company |
-| M4 "Título" | tela de título com música, e o controle navega no menu |
-| M5 "Jogo novo" | cria personagem, cutscene inicial, controla o personagem |
-| M6 "Mundo aberto" | anda por Paldea 10 min sem crash; FPS medido |
-| M7 "App" | launcher próprio, configurações, recursos extras |
+| Marco | Critério objetivo | Estado (16/10) |
+|---|---|---|
+| M0 Dump pronto | `dumps/base/exefs/main` e `dumps/update/exefs/main` existem; build ids anotados; romfs listado | ✅ gate dumps (run_id=131ff828b2) |
+| M1 "Compila" | `generated/main/*.c` + `sdk` compilam e linkam numa DLL; 0 `rt_udf` por instrução não suportada (ou lista justificada) | ✅ gate boot com pvgame.dll (run_id=990a33212b) |
+| M2 "Respira" | log mostra o jogo criando threads, abrindo serviços e entrando no loop de frames (headless) | ✅ v400 run_id=7adc0390c2, base run_id=db35401e31 |
+| M3 "Primeiro pixel" | screenshot automático mostra o logo da Game Freak / The Pokémon Company | ✅ gate window (run_id=312d34de1a): telas renderizadas no jogo novo |
+| M4 "Título" | tela de título com música, e o controle navega no menu | ✅ gate window (run_id=312d34de1a) + áudio corrigido 16/10 (o [USER] confirma o som) |
+| M5 "Jogo novo" | cria personagem, cutscene inicial, controla o personagem | ✅ gate window (run_id=312d34de1a): a cena avança com a entrada; nome pela caixa de texto (16/10) |
+| M6 "Mundo aberto" | anda por Paldea 10 min sem crash; FPS medido | 🟢 teste do [USER] (>10 min) + frametime a 30 fps no mundo aberto; falta um gate longo |
+| M7 "App" | launcher próprio, configurações, recursos extras | 🟡 nome PSV Recomp, psvrecomp.ini, crash report |
 
 ## Diferenças em relação ao Zelda (riscos principais)
 
