@@ -62,7 +62,7 @@ Ordem de trabalho (atualizada no fim de 15/10; 🟢 = provado por run_auto/teste
       dos mais usados.
 4. 🟢 **Log e aviso de crash (7.x):** caixa de erro com a causa + cópia do log em `crashes/` + `tools/rea/crash_report.py` (16/10; falta o [USER] ver a caixa na janela).
 5. **Visual:** skybox com linhas, artefatos de iluminação, objetos sem render. O [USER] indica o lugar e cria saves.
-6. **Áudio (5.1):** hoje silêncio total.
+6. 🟢 **Áudio (5.1):** corrigido 16/10 (o build de janela usava o dispositivo de áudio falso do headless); o jogo toca pelo audout. Falta o [USER] ouvir na janela.
 7. **Teclado do nome (5.6, swkbd):** hoje o jogo usa um nome padrão (`?瑱?` na ficha).
 8. **Gate `window`:** screenshot automático no frame N para formalizar M3-M5.
 9. **Fidelidade (futuro, depois da fluidez):** resolução 1440p/4K (a base do LAS já tem escala de render; faltam

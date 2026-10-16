@@ -5,7 +5,11 @@
 #include <math.h>
 #include <time.h>
 
+#ifdef PVR_VULKAN
+#include <SDL3/SDL.h>  // (PVRecomp) window build: the real audio device, as LAS (the null one left the game silent)
+#else
 #include "../platform/sdl_audio_null.h"  // PVRecomp: headless, null audio device (card W04)
+#endif
 
 #include "../hle.h"
 #include "../settings.h"
