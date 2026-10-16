@@ -16,6 +16,7 @@
 #include "../renderer.h"
 #include "../../settings.h"
 
+static uint32_t g_save_layer;  // (PVRecomp, diag) array layer renderer_save_texture_tex reads
 // PVRecomp: why draws are skipped (appended to the [vk] stats line as "skip why: ...")
 static uint64_t stat_skip_why[11];
 static const char *const skip_why_name[11] = {"cs_pending", "cs_failed", "no_program", "prog_pending", "prog_failed",
@@ -705,6 +706,16 @@ static void vk_end_pass_at(int line) {
     vkCmdEndRendering(vk_cmd());
     in_pass = false;
     if (in_xfb_pass) { in_xfb_pass = false; xs_flush(vk_cmd()); }  // captured vertices -> guest memory
+    if (g_debug_frame && st.rt.ncolor && (!st.rt.color[0] || !st.rt.color[0]->backend) && getenv("PVR_DIAG_ALLRT")) {
+        // (PVRecomp) G-buffer passes start at target 1: save their targets too (pass_<n>_rt<i>.png)
+        for (int i = 1; i < st.rt.ncolor && i < 8; i++)
+            if (st.rt.color[i] && st.rt.color[i]->backend) {
+                char p2[96];
+                snprintf(p2, sizeof p2, "build/pass_%03d_rt%d.png", debug_pass_no, i);
+                renderer_save_texture_tex(st.rt.color[i]->backend, p2);
+            }
+        debug_pass_no++;
+    }
     if (g_debug_frame && st.rt.ncolor && st.rt.color[0] && st.rt.color[0]->backend) {
         char path[256];
         static uint64_t debug_pass_frame = ~0ull;
@@ -1038,6 +1049,27 @@ static VkPipelineLayout make_layout(Prog *p, int nsets, VkShaderStageFlags s0, V
     return l;
 }
 
+// (PVRecomp, diag) PVR_GLSL_OVERRIDE=<dir>: <dir>/<addr>_<vs|fs|cs>.glsl replaces the translated source (A/B tests on one
+// shader, e.g. forcing a culling compute to keep everything). The translator's reflection info is kept: edit bodies only.
+static void override_glsl(char **msl, uint64_t addr, const char *suffix) {
+    const char *dir = getenv("PVR_GLSL_OVERRIDE");
+    if (!dir) return;
+    char path[512];
+    snprintf(path, sizeof path, "%s/%llx_%s.glsl", dir, (unsigned long long)addr, suffix);
+    FILE *f = fopen(path, "rb");
+    if (!f) return;
+    fseek(f, 0, SEEK_END);
+    long n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    char *src = malloc((size_t)n + 1);
+    if (src && fread(src, 1, (size_t)n, f) == (size_t)n) {
+        src[n] = 0;
+        *msl = src;  // (the translated one leaks: diagnostics only)
+        LOG("[glsl] override %s (%ld bytes)\n", path, n);
+    } else free(src);
+    fclose(f);
+}
+
 static void save_glsl(const char *src, uint64_t addr, const char *suffix) {
     if (!getenv("LARECOMP_SAVE_MSL")) return;
     mkdir("build/glsl", 0755);
@@ -1107,6 +1139,8 @@ static void translate_program(void *arg) {
     p->vs_uses_vid = strstr(p->vi->msl, "gl_VertexIndex") != NULL;
     save_glsl(p->vi->msl, p->code[0], "vs");
     if (!p->depth_only) save_glsl(p->fi->msl, p->code[1], "fs");
+    override_glsl(&p->vi->msl, p->code[0], "vs");
+    if (!p->depth_only) override_glsl(&p->fi->msl, p->code[1], "fs");
     run_job(compile_program, p);
 }
 
@@ -1571,9 +1605,24 @@ static VkDescriptorBufferInfo ubo_span(VkSpan s, uint64_t size) {
 }
 
 // Constant buffer k of a stage (renderer.m bind_cbufs), copied into transient memory.
+static bool guest_direct(uint64_t addr, uint64_t size, VkBuffer *buf, VkDeviceSize *off);
 static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32_t gx, uint32_t gy, uint32_t gz) {
     static const uint8_t zeros[0x10000];
     if (k == 0) {
+        if (getenv("PVR_DIAG_SBUF")) {  // (PVRecomp, diag) storage buffers no memory window covers: their stores are dropped
+            static uint64_t seen[256]; static int nseen;
+            for (int i = 0; i < 16; i++) {
+                uint64_t a = st.sbuf[stage][i].addr, sz = st.sbuf[stage][i].size;
+                VkBuffer d; VkDeviceSize o;
+                if (!a || guest_direct(a, sz ? sz : 4, &d, &o)) continue;
+                int j = 0;
+                while (j < nseen && seen[j] != a) j++;
+                if (j < nseen || nseen == 256) continue;
+                seen[nseen++] = a;
+                LOG("[sbuf] stage %d slot %d %llx size %llu (code %llx) NOT IN ANY WINDOW\n", stage, i, (unsigned long long)a,
+                    (unsigned long long)sz, (unsigned long long)st.program->stages[stage].code_addr);
+            }
+        }
         uint32_t drv[0x800 / 4] = {0};
         if (stage == 5) {
             drv[0x200 / 4] = gx; drv[0x204 / 4] = gy; drv[0x208 / 4] = gz;
@@ -2109,6 +2158,7 @@ static CsProg *compute_program(NvnProgram *np) {
         if (!cp->local[i]) cp->local[i] = 1;
     }
     save_glsl(cp->si->msl, ss->code_addr, "cs");
+    override_glsl(&cp->si->msl, ss->code_addr, "cs");
     run_job(build_compute, cp);
     return cp;
 }
@@ -2124,6 +2174,31 @@ static void dispatch_compute(uint32_t gx, uint32_t gy, uint32_t gz) {
     gp_mark(cb, "dispatch %ux%ux%u (local %ux%ux%u)", gx, gy, gz, cp->local[0], cp->local[1], cp->local[2]);
     dl_note("dispatch %ux%ux%u cs %llx gmem %d", gx, gy, gz, (unsigned long long)st.program->stages[5].code_addr, cp->si->uses_gmem);
     nfeedback = 0;
+    if (getenv("PVR_DIAG_GPTR")) {  // (PVRecomp, diag) pointers in this compute's cbufs that no memory window covers
+        static uint64_t want = 1;
+        if (want == 1) want = strtoull(getenv("PVR_DIAG_GPTR"), NULL, 16);
+        static int nlog;
+        if (st.program->stages[5].code_addr == want && nlog < 6) {
+            nlog++;
+            for (int b = 0; b < 18; b++) {
+                const Range *u = &st.ubuf[5][b];
+                if (!u->addr || !u->size) continue;
+                const uint64_t *q = (const uint64_t *)(uintptr_t)u->addr;
+                int n = 0, miss = 0;
+                for (uint64_t i = 0; i < u->size / 8 && i < 4096; i++) {
+                    uint64_t a = q[i];
+                    if (a < 0x7000000000ull || a >= 0x8000000000ull) continue;
+                    n++;
+                    VkBuffer d; VkDeviceSize o;
+                    bool cov = guest_direct(a, 4, &d, &o);
+                    if (!cov && miss++ < 8) LOG("[gptr] cs %llx cb%d +%#llx = %llx NOT IN ANY WINDOW\n", (unsigned long long)want, b,
+                                                (unsigned long long)i * 8, (unsigned long long)a);
+                }
+                LOG("[gptr] cs %llx cb%d size %llu: %d pointers, %d outside the windows\n", (unsigned long long)want, b,
+                    (unsigned long long)u->size, n, miss);
+            }
+        }
+    }
     VkDescriptorSet ds = stage_set(&cp->p, cp->p.set_layout[0], 0, 5, cp->si, NULL, NULL, gx, gy, gz, NULL);
     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, cp->pipe);
     vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE, cp->p.layout, 0, 1, &ds, 0, NULL);
@@ -2166,6 +2241,26 @@ static bool topology(uint32_t mode, VkPrimitiveTopology *t, uint8_t *cls) {
 }
 
 static void draw_(CmdRec *r, bool indexed);
+// (PVRecomp, diag) this frame's indirect argument records; vk_indirect_frame_report reads them once the GPU is idle
+#define IND_LIST 8192
+static uint64_t ind_list[IND_LIST];
+static int ind_list_n;
+void vk_indirect_frame_report(uint64_t frame) {
+    static int on = -1;
+    if (on < 0) on = getenv("PVR_DIAG_INDIRECT") != NULL;
+    if (on && frame % 150 == 0 && ind_list_n) {
+        vkDeviceWaitIdle(g_vk.dev);  // (the GPU wrote the instance counts of this frame's culling by now)
+        int zero = 0, nz = 0, zc = 0; uint64_t sum = 0, maxi = 0;
+        for (int i = 0; i < ind_list_n; i++) {
+            const uint32_t *w = (const uint32_t *)(uintptr_t)ind_list[i];
+            if (!w[0]) zc++;
+            if (w[1]) { nz++; sum += w[1]; if (w[1] > maxi) maxi = w[1]; } else zero++;
+        }
+        LOG("[indirect] frame %llu after GPU idle: %d records, instances 0 in %d, >0 in %d (avg %.1f max %llu), index count 0 in %d\n",
+            (unsigned long long)frame, ind_list_n, zero, nz, nz ? (double)sum / nz : 0.0, (unsigned long long)maxi, zc);
+    }
+    ind_list_n = 0;
+}
 // (PVRecomp) Indirect draws: the game's static world command buffers (recorded once, ~800 DrawElementsIndirect,
 // replayed every frame) draw terrain detail, trees, rocks and bushes whose instance counts a culling compute writes
 // on the GPU. They used to be recorded and never executed. The arguments live in a guest GPU pool: the index count /
@@ -2191,6 +2286,7 @@ static void draw_indirect(CmdRec *r, bool indexed) {
     }
     g_ind.on = true; g_ind.buf = b; g_ind.off = o;
     stat_indirect++;
+    if (ind_list_n < IND_LIST) ind_list[ind_list_n++] = addr;
     if (getenv("PVR_DIAG_INDIRECT")) {  // (the instance count the GPU wrote last frame: is the culling keeping anything?)
         static uint64_t zero, nz, inst_sum, seen;
         if (w[1]) { nz++; inst_sum += w[1]; } else zero++;
@@ -2835,7 +2931,7 @@ static void debug_draw(Prog *pr, CmdRec *r, bool indexed) {
         NvnTexture *t = shader_texture_object(1, &pr->fi->tex[i]);
         const TexBackend *b = t ? (const TexBackend *)t->backend : NULL;
         if (!t) { LOG("[draw]   tex%d: none\n", i); continue; }
-        LOG("[draw]   tex%d: %p %ux%u f%#x lv %u -> %ux%u scale %.4f %.4f%s\n", i, (void *)t, t->width, t->height, t->format,
+        LOG("[draw]   tex%d: %p %ux%u f%#x tgt %u depth %u layers %u lv %u -> %ux%u scale %.4f %.4f%s\n", i, (void *)t, t->width, t->height, t->format, t->target, t->depth, b ? b->layers : 0,
             b ? b->levels : 0, b ? b->width : 0, b ? b->height : 0, b ? b->sx : 0, b ? b->sy : 0, b && b->scalable ? " scalable" : "");
         if (b && getenv("PVR_DIAG_SAVETEX")) {  // phase 4: dump a draw's textures (PVR_DIAG_SAVETEX=<width>, e.g. 2048)
             static int nsaved;
@@ -2845,6 +2941,14 @@ static void debug_draw(Prog *pr, CmdRec *r, bool indexed) {
                 char path[96];
                 snprintf(path, sizeof path, "build/tex_%ux%u_f%x_t%d_%d.png", t->width, t->height, t->format, i, nsaved++);
                 renderer_save_texture_tex((TexBackend *)b, path);
+                if (getenv("PVR_DIAG_SAVETEX_LAYERS") && b->layers > 1)  // (every layer of an array: _L<n>.png)
+                    for (uint32_t L = 1; L < b->layers && L < 64; L++) {
+                        char lp[128];
+                        snprintf(lp, sizeof lp, "%.*s_L%u.png", (int)(strlen(path) - 4), path, L);
+                        g_save_layer = L;
+                        renderer_save_texture_tex((TexBackend *)b, lp);
+                    }
+                g_save_layer = 0;
             }
         }
     }
@@ -3173,7 +3277,7 @@ static VkImageView raw_view(TexBackend *b) {
     VkFormat f = b->format == VK_FORMAT_R8G8B8A8_SRGB ? VK_FORMAT_R8G8B8A8_UNORM
                : b->format == VK_FORMAT_B8G8R8A8_SRGB ? VK_FORMAT_B8G8R8A8_UNORM : b->format;
     static const VkComponentMapping id = {0};
-    return vk_image_view(b, VK_IMAGE_VIEW_TYPE_2D, f, 0, 1, 0, 1, id, VK_IMAGE_ASPECT_COLOR_BIT);
+    return vk_image_view(b, VK_IMAGE_VIEW_TYPE_2D, f, 0, 1, g_save_layer < b->layers ? g_save_layer : 0, 1, id, VK_IMAGE_ASPECT_COLOR_BIT);
 }
 
 // ---- post passes (Video tab "Anti-aliasing" / "Upscaler"): SMAA 1x at the game image's size, then AMD FSR 1 (EASU
@@ -3598,7 +3702,7 @@ static void exec_list(uint64_t handle, int depth) {
             if (getenv("PVR_LOG_COPIES")) LOG("[dispatch] %ux%ux%u\n", (uint32_t)r->x[0], (uint32_t)r->x[1], (uint32_t)r->x[2]);
             if (pvr_watch_addr()) {
                 for (int i = 0; i < 16; i++) if (st.sbuf[5][i].addr && pvr_watch_hit(st.sbuf[5][i].addr, st.sbuf[5][i].size))
-                    LOG("[watch] dispatch cs=%llx sbuf%d %llx size %llu\n", (unsigned long long)st.program->stages[0].code_addr, i,
+                    LOG("[watch] dispatch cs=%llx sbuf%d %llx size %llu\n", (unsigned long long)st.program->stages[5].code_addr, i,
                         (unsigned long long)st.sbuf[5][i].addr, (unsigned long long)st.sbuf[5][i].size);
                 LOG("[watch] dispatch %ux%ux%u\n", (uint32_t)r->x[0], (uint32_t)r->x[1], (uint32_t)r->x[2]);
             }
@@ -3621,6 +3725,34 @@ static void exec_list(uint64_t handle, int depth) {
             if (r->x[1]) nvn_sync_set_seq(r->x[1], renderer_fence_seq());
             break;
         }
+        case CMD_SIGNAL_EVENT: case CMD_REPORT_VALUE: {
+            // (PVRecomp) GPU-time writes the CPU polls: SignalEvent(event, mode, location, flags, value) writes the event's
+            // u32; ReportValue(value, address) writes a u32 at an address. Both were dropped, so the game never saw its
+            // GPU progress markers. vkCmdFillBuffer on the imported guest memory lands when the GPU gets there.
+            uint64_t addr; uint32_t value; bool add = false;
+            if (r->op == CMD_SIGNAL_EVENT) {
+                addr = r->x[0] ? *(const uint64_t *)(uintptr_t)r->x[0] : 0;  // (Event: storage address @0, objects.c)
+                value = (uint32_t)r->x[4]; add = r->x[1] == 1;
+            } else { value = (uint32_t)r->x[0]; addr = r->x[1]; }
+            static uint64_t n[2], nadd, nfail;
+            n[r->op == CMD_SIGNAL_EVENT]++;
+            if (((n[0] + n[1]) & (n[0] + n[1] - 1)) == 0)
+                LOG("[event] ReportValue %llu SignalEvent %llu (add %llu, no window %llu)\n", (unsigned long long)n[0],
+                    (unsigned long long)n[1], (unsigned long long)nadd, (unsigned long long)nfail);
+            if (add) { nadd++; break; }  // (ADD mode: not seen yet)
+            VkBuffer b; VkDeviceSize o;
+            if (!addr || (addr & 3) || !guest_direct(addr, 4, &b, &o)) {
+                nfail++;
+                if (addr && !(addr & 3)) *(uint32_t *)(uintptr_t)addr = value;  // (outside the windows: at least the CPU sees it)
+                break;
+            }
+            vk_end_pass();
+            VkCommandBuffer fcb = vk_cmd();
+            vk_full_barrier(fcb);
+            vkCmdFillBuffer(fcb, b, o, 4, value);
+            vk_full_barrier(fcb);
+            break;
+        }
         case CMD_REPORT_COUNTER: {
             // The game times its GPU work with these (two per frame) and drops to 30 fps when that looks slow;
             // the value is our translation time, not GPU time. LARECOMP_VK_COUNTER=frozen: the same timestamp for
@@ -3640,7 +3772,14 @@ static void exec_list(uint64_t handle, int depth) {
             // object visible. PVR_OCCLUSION_ZERO=1: the old value (A/B).
             static int occl_zero = -1;
             if (occl_zero < 0) occl_zero = getenv("PVR_OCCLUSION_ZERO") != NULL;
-            uint64_t v0 = (type == 1 && !occl_zero) ? 0x100000ull : 0;
+            // (PVRecomp) SAMPLES_PASSED is a running counter: games read it before and after a draw and test end - begin.
+            // A constant made every such difference 0 (object occluded). It now grows on every report, so any pair
+            // says "visible". PVR_OCCLUSION_CONST=1: the constant (A/B).
+            static int occl_const = -1;
+            if (occl_const < 0) occl_const = getenv("PVR_OCCLUSION_CONST") != NULL;
+            static uint64_t samples = 0x100000;
+            if (type == 1 && !occl_zero && !occl_const) samples += 0x100000;
+            uint64_t v0 = (type == 1 && !occl_zero) ? samples : 0;
             if (out) { out[0] = v0; out[1] = frozen ? frame_ts : SDL_GetTicksNS(); }
             break;
         }

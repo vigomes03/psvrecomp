@@ -391,6 +391,18 @@ NVN(nvnTextureInitialize) {
     if (t->flags & 2)
         LOG("[nvn] video texture %p: %ux%u fmt %#x flags %#x target %u addr %llx stride %llu\n", t, t->width, t->height,
             t->format, t->flags, t->target, t->addr, t->stride);
+    if (getenv("PVR_DIAG_TEXSIZES")) {  // (PVRecomp, diag) textures created by largest side: does streaming load big ones?
+        static uint64_t hist[16], n;
+        uint32_t m = t->width > t->height ? t->width : t->height;
+        int b = 0;
+        while ((1u << b) < m && b < 15) b++;
+        hist[b]++;
+        if (++n % 2000 == 0) {
+            LOG("[texsizes] %llu textures:", (unsigned long long)n);
+            for (int i = 0; i < 16; i++) if (hist[i]) LOG(" <=%u:%llu", 1u << i, (unsigned long long)hist[i]);
+            LOG("\n");
+        }
+    }
     SET_HOST(A(0), t);
     RET(1);
 }

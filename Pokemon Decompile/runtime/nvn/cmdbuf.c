@@ -509,7 +509,7 @@ PLAIN(nvnCommandBufferBarrier, CMD_BARRIER)
 PLAIN(nvnCommandBufferSignalEvent, CMD_SIGNAL_EVENT)
 PLAIN(nvnCommandBufferWaitEvent, CMD_WAIT_EVENT)
 PLAIN(nvnCommandBufferReportCounter, CMD_REPORT_COUNTER)
-NVN(nvnCommandBufferReportValue) { (void)c; }
+PLAIN(nvnCommandBufferReportValue, CMD_REPORT_VALUE)  // (PVRecomp: cmd, value, buffer address; written at GPU time)
 NVN(nvnCommandBufferResetCounter) { (void)c; }
 NVN(nvnCommandBufferCallCommands) {
     record_copy_split(c, CMD_CALL, 1, 2, 8, PIECE_BYTES / 8, -1);

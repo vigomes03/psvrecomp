@@ -534,6 +534,7 @@ void backend_present(NvnTexture *t) {
     frames++;
     total_frames++;
     { extern void pvr_watch_count(const char *when); if (total_frames % 100 == 0) pvr_watch_count("present"); }
+    { extern void vk_indirect_frame_report(uint64_t frame); vk_indirect_frame_report(total_frames); }
     g_frame_counter++;
     extern void input_frame(uint64_t frame);
     input_frame(total_frames);
