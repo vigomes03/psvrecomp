@@ -14,6 +14,8 @@ H=/d/Dev/REA/lab/host-vk
 export PATH="/d/msys64/ucrt64/bin:$PATH"
 export PVR_SYSFONT_DIR=${PVR_SYSFONT_DIR:-D:/Dev/REA/lab/sysfont}
 export PVR_DISPLAY=${PVR_DISPLAY:-2}  # (window on the 2nd monitor: [USER] works on the primary)
+export SDL_AUDIO_DRIVER=${SDL_AUDIO_DRIVER:-dummy}  # (pipeline runs are silent: same audio timing, nothing on the speakers;
+                                                  #  run_window.cmd keeps the sound. SDL_AUDIO_DRIVER= unset/other to hear)
 export PVR_AUTOPRESS=${PVR_AUTOPRESS:-A:1000:100:3000}
 if [ -z "${PVR_INPUT:-}" ]; then
   PVR_INPUT=$(python -c "print(','.join(f'{t}:STICK_RIGHT:300' for t in range(5500, $SECS*1000+5000, 5000)))")
