@@ -596,8 +596,9 @@ static const char *RSC2(Ctx *c, int slot, const char *fmt, ...) {
 
 // TEXS / TLDS: texture_info selects target and coordinate layout
 static const char *alayer(Ctx *c, const char *r, int slot, char *buf) {
-    if (c->glsl) sprintf(buf, "min(%s, uint(tsize%d(0).z) - 1u)", r, slot);
-    else sprintf(buf, "min(%s, t%d.get_array_size() - 1u)", r, slot);
+    // (PVRecomp) the array index is the register's low 16 bits (yuzu/eden ReadArray: ConvertUToF(32, 16, X(reg)))
+    if (c->glsl) sprintf(buf, "min((%s) & 0xFFFFu, uint(tsize%d(0).z) - 1u)", r, slot);
+    else sprintf(buf, "min((%s) & 0xFFFFu, t%d.get_array_size() - 1u)", r, slot);
     return buf;
 }
 #define ALAYER(r, slot) alayer(c, (r), (slot), alloca(96))
@@ -828,7 +829,7 @@ static void emit_tex(Ctx *c, uint64_t w, bool bindless) {
         char cs[3][40], lay[96], lodv[48], offv[96], drv[48], gcall[4096];
         const char *co[3], *layp = NULL, *lodp = NULL, *offp = NULL, *drp = NULL;
         int ar2 = a, p2 = b, lk = 0;
-        if (array) { sprintf(lay, "min(uint(r%d), uint(tsize%d(0).z) - 1u)", a, slot); c->reg_used[a] = 1; ar2 = a + 1; layp = lay; }
+        if (array) { sprintf(lay, "min(uint(r%d) & 0xFFFFu, uint(tsize%d(0).z) - 1u)", a, slot); c->reg_used[a] = 1; ar2 = a + 1; layp = lay; }
         for (int i = 0; i < ncoord; i++) { sprintf(cs[i], "as_type<float>(r%d)", ar2 + i); c->reg_used[ar2 + i] = 1; co[i] = cs[i]; }
         if (lod_mode == 2 || lod_mode == 3 || lod_mode == 6 || lod_mode == 7) {
             c->reg_used[p2] = 1;
@@ -849,7 +850,7 @@ static void emit_tex(Ctx *c, uint64_t w, bool bindless) {
     char coords[256] = "", layer[64] = "", tmp[64];
     int ar = a;
     // the hardware clamps the array index to the layer count
-    if (array) { sprintf(layer, "min(uint(r%d), t%d.get_array_size() - 1u)", a, slot); c->reg_used[a] = 1; ar = a + 1; }
+    if (array) { sprintf(layer, "min(uint(r%d) & 0xFFFFu, t%d.get_array_size() - 1u)", a, slot); c->reg_used[a] = 1; ar = a + 1; }
     for (int i = 0; i < ncoord; i++) {
         sprintf(tmp, "%sas_type<float>(r%d)", i ? ", " : "", ar + i);
         c->reg_used[ar + i] = 1;

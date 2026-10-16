@@ -1,6 +1,7 @@
 // time:u / time:a / time:s
 #include <string.h>
 #include <sys/time.h>
+#include <stdlib.h>
 #include <time.h>
 
 #include "../hle.h"
@@ -9,7 +10,19 @@
 static const uint8_t clock_uuid[16] = {0x4c, 0x41, 0x52, 0x65, 0x63, 0x6f, 0x6d, 0x70, 1, 2, 3, 4, 5, 6, 7, 8};
 
 static int64_t steady_seconds(void) { return (int64_t)(rt_ticks() / 19200000ull); }
-static int64_t unix_now(void) { return (int64_t)time(NULL); }
+// (PVRecomp) PVR_CLOCK_START=<unix seconds>: the clock starts there and runs normally. Violet's time of day follows
+// the system clock (one game day = 72 real minutes), so A/B captures against a reference (Eden) need the same instant.
+static int64_t unix_now(void) {
+    static int64_t base = -1, host0;
+    if (base == -1) {
+        const char *e = getenv("PVR_CLOCK_START");
+        base = e ? strtoll(e, NULL, 10) : 0;
+        host0 = (int64_t)time(NULL);
+        if (base) LOG("[time] clock starts at %lld (PVR_CLOCK_START)\n", (long long)base);
+    }
+    int64_t now = (int64_t)time(NULL);
+    return base ? base + (now - host0) : now;
+}
 
 static void write_system_context(uint8_t *p) {  // SystemClockContext (0x20)
     int64_t steady = steady_seconds();

@@ -66,10 +66,10 @@ Ordem de trabalho (atualizada no fim de 15/10; 🟢 = provado por run_auto/teste
    Poco Path (conferir após a correção), artefatos de iluminação — o [USER] indica o lugar e cria saves.
    Comparação com o Eden (referência, mesmo save, mesmo ponto; `lab/host-diag/ab_eden_big.png`, 16/10):
    - [x] **Árvores ausentes** — corrigido 16/10 (S2R LANEID/LTMASK = 0 no append agregado por warp do culling da GPU)
-   - [ ] **Imagem clara e lavada:** luminância média 140 vs 126 no Eden, contraste (desvio) 60 vs 70, saturação 88 vs 95.
-     Suspeitos: exposição automática (histograma), curva de tonemapping/color grading
-   - [ ] **Sombras sem o tom azulado** do céu: no Eden as áreas na sombra puxam para o azul (luz ambiente/céu)
-   - [ ] **Pouca oclusão de contato** na base da grama e das moitas (o Eden escurece o pé da vegetação)
+   - [x] Imagem clara/lavada, sombras sem azul, pouca oclusão — **não eram bugs de luz**: hora do dia diferente entre as
+     capturas (o Violet segue o relógio; 1 dia = 72 min) + árvores ausentes. Com `PVR_CLOCK_START` no instante da captura
+     do Eden: luminância 134,3 vs 133,2, contraste 65,5 vs 65,9, saturação 101,6 vs 99,6, diferença média 5/255 (16/10)
+   - [ ] Pequeno: névoa/desfoque de distância um pouco mais suave no Eden (fundo central)
    - [x] Moitas menos densas perto da placa — mesma causa das árvores, corrigido 16/10
 6. 🟢 **Áudio (5.1):** corrigido 16/10 (o build de janela usava o dispositivo de áudio falso do headless); o jogo toca pelo audout. **Confirmado pelo [USER]** (ouviu na janela, 16/10).
 7. 🟢 **Teclado do nome (5.6, swkbd):** caixa de texto na frente do jogo, no monitor do jogo + resposta em UTF-16 (o Violet não usa UTF-8). **Confirmado pelo [USER]:** digitou "Lokiju" e a ficha mostra o nome e a foto (16/10).
