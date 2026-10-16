@@ -90,7 +90,7 @@ Ordem de trabalho (atualizada no fim de 15/10; 🟢 = provado por run_auto/teste
 | M3 "Primeiro pixel" | screenshot automático mostra o logo da Game Freak / The Pokémon Company | ✅ gate window (run_id=312d34de1a): telas renderizadas no jogo novo |
 | M4 "Título" | tela de título com música, e o controle navega no menu | ✅ gate window (run_id=312d34de1a) + áudio corrigido 16/10 (o [USER] confirma o som) |
 | M5 "Jogo novo" | cria personagem, cutscene inicial, controla o personagem | ✅ gate window (run_id=312d34de1a): a cena avança com a entrada; nome pela caixa de texto (16/10) |
-| M6 "Mundo aberto" | anda por Paldea 10 min sem crash; FPS medido | 🟢 teste do [USER] (>10 min) + frametime a 30 fps no mundo aberto; falta um gate longo |
+| M6 "Mundo aberto" | anda por Paldea 10 min sem crash; FPS medido | ✅ gate window --save (run_id=c6a80b10d8): 10 min no mundo aberto sem crash a ~29 fps, entrada automática simples (não é exploração livre) + teste do [USER] (>10 min) |
 | M7 "App" | launcher próprio, configurações, recursos extras | 🟡 nome PSV Recomp, psvrecomp.ini, crash report |
 
 ## Diferenças em relação ao Zelda (riscos principais)

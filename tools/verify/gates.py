@@ -352,7 +352,11 @@ def g_window(g, a):
     secs = max(a.seconds, 60)
     save = H / "save_gate"
     shutil.rmtree(save, ignore_errors=True)
-    save.mkdir(parents=True)
+    if a.save:  # --save <dir with save_0/...>: start from that save (M6: the open world) instead of a new game
+        shutil.copytree(a.save, save)
+        g.info.update(save=str(a.save))
+    else:
+        save.mkdir(parents=True)
     env = dict(os.environ)
     for k in ("PVR_FRAMEPACE", "PVR_FPS_CAP", "PVR_GAME60", "SAVE_SEED", "PVR_INPUT", "PVR_AUTOPRESS", "PVR_TEST_CRASH"):
         env.pop(k, None)  # (30 fps, default input, nothing provoked)
@@ -586,6 +590,7 @@ def main():
         s.add_argument("--min-stage", help="stage, or comma list of stages that must all be reached: " + ", ".join(STAGE_NAMES))
         s.add_argument("--seconds", type=int, default=30)
         s.add_argument("--repeat", type=int, default=1, help="boot: N runs, all must pass")
+        s.add_argument("--save", help="window: start from a copy of this save dir (default: new game, empty save)")
         s.add_argument("--version", default="base", help="dump version: dumps/<version>, lab/gen-<version> (base = lab/genfull)")
         if n == "claim":
             s.add_argument("--text", required=True)
