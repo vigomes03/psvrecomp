@@ -81,6 +81,13 @@ Ordem de trabalho (atualizada no fim de 15/10; 🟢 = provado por run_auto/teste
 
 ## Problemas conhecidos (para caçar depois)
 
+- **Crash no vestiário (escola, antes de "Head to the lighthouse")**, jogo manual do [USER] em 16/10, 1 ocorrência,
+  sem passo a passo para repetir: `exception c0000005 accessing 0xffffffffffffffff` em `f_7000bf3dcc <- f_7000bf399c
+  <- f_70027beaec <- f_7002b79458`. `f_7000bf3dcc` é a remoção de um nó de `unordered_map` (libc++ `__hash_table`):
+  o nó lido do bucket (x19 = `32d102231b656757`) é lixo, ou seja, a tabela já estava corrompida (uso depois de
+  liberar / corrida entre threads), não um erro de tradução nesse ponto. Log: `lab/host-vk/crash_vestiario_20261016.log`
+  (tem o `[input]` da sessão); save logo depois: `lab/saves/user_apos_vestiario_20261016`. Se repetir no mesmo
+  lugar, vira bug determinístico e se caça pelo chamador.
 - **Crash raro no carregamento da 1ª batalha** (~1 em 9 execuções do save `user_antes_batalha_20261015`, sem
   limitador): `exception c0000005` em funções do jogo, p.ex. `f_7000c1e658 <- f_7000c1e5f8 <- f_7000e02cac` (busca
   de componente com hash `0x3d3f8b275e8b9993` que volta nulo e o chamador não checa) e outro acessando `0x1e8`; uma
