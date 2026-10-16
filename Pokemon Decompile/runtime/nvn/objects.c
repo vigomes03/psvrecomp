@@ -726,11 +726,13 @@ NVN(nvnQueueAcquireTexture) {
     w->next = (w->next + 1) % (w->active ? w->active : 1);
     RET(0);
 }
+void framepace_present(int interval);  // (PVRecomp) runtime/framepace.c: the Switch's present interval
 NVN(nvnQueuePresentTexture) {
     NvnWindow *w = HOST(NvnWindow, A(1));
     int i = (int)A(2);
     if (i >= 0 && i < w->num) backend_present(HOST(NvnTexture, w->textures[i]));
     texture_reap();
+    framepace_present(w->interval);
 }
 
 // ================================================================== small state objects
