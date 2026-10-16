@@ -3584,7 +3584,14 @@ static void exec_list(uint64_t handle, int depth) {
             static uint64_t frame_seen = ~0ull, frame_ts;
             extern uint64_t vk_frame_counter(void);
             if (frozen && vk_frame_counter() != frame_seen) { frame_seen = vk_frame_counter(); frame_ts = SDL_GetTicksNS(); }
-            if (out) { out[0] = 0; out[1] = frozen ? frame_ts : SDL_GetTicksNS(); }
+            // (PVRecomp) type 1 = SAMPLES_PASSED (occlusion query; 0 / 16 = timestamps). Reporting 0 samples made the
+            // game cull everything it occlusion-tests: in the open world the player vanished a moment after the
+            // fade-in (only its shadow, drawn by a pass without the test, stayed). No real query yet: report the
+            // object visible. PVR_OCCLUSION_ZERO=1: the old value (A/B).
+            static int occl_zero = -1;
+            if (occl_zero < 0) occl_zero = getenv("PVR_OCCLUSION_ZERO") != NULL;
+            uint64_t v0 = (type == 1 && !occl_zero) ? 0x100000ull : 0;
+            if (out) { out[0] = v0; out[1] = frozen ? frame_ts : SDL_GetTicksNS(); }
             break;
         }
         case CMD_COPY_TEXTURE_TO_TEXTURE: { const TexRefRec *t = x; copy_texture(&t[0], &t[1], r->x[6]); break; }

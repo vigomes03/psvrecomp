@@ -55,6 +55,7 @@ python tools/verify/gates.py run host --version v400
 | `PVR_XFB_SCRATCH=0` / `PVR_XFB_OWN_PASS=0` | A/B: transform feedback (personagens) volta a escrever direto na memória do guest / no passe normal |
 | `PVR_SUBMIT=list` | A/B: uma submissão por lista de comandos (o padrão segue o NVN: envia no Flush/Finish/present) |
 | `PVR_XFB_NOSTORE=1` | (medição, quebra a imagem) shaders de xfb sem as escritas |
+| `PVR_OCCLUSION_ZERO=1` | A/B: occlusion query volta a reportar 0 pixels (o jogo esconde o personagem no mundo aberto) |
 | `PVR_SUBS=<1..64>` | quantas submissões em voo o backend usa (padrão 64; o LAS usava 8) — A/B de desempenho |
 
 Detalhe de uso e armadilhas: skill `switch-static-recompilation` (referência `vulkan-backend.md`).
