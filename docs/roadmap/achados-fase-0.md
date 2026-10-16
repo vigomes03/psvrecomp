@@ -7,11 +7,11 @@
 | Arquivo | Tamanho | O quê |
 |---|---:|---|
 | `Pokémon Violet.xci` | 7.985.954.816 | cartucho 8 GB, jogo base (v1.0.0 presumido ❓) |
-| `Pokémon Violet v4.0.0.nsp` | 5.235.895.884 | update **v4.0.0**. ⛔ **NÃO USAR**: baixado da internet, não dumpado do console |
+| `Pokémon Violet v4.0.0.nsp` | 5.235.895.884 | update **v4.0.0** (liberado pelo [USER] em 16/10: base do recomp e do Eden de referência) |
 | `The Legend of Zelda Links Awakening [01006BB00C6F0000][v0].nsp` | 6.274.802.512 | Zelda LA v1.0.0. ⛔ **NÃO USAR** até confirmar que veio do console/compra do [USER] |
 
-**Decisão (14/10):** trabalhamos só com o que veio do console do [USER]. Base = **cartucho v1.0.0**. Update e Zelda
-só depois de dumpados com nxdumptool/DBI do próprio Switch (atualizar o jogo pelo console → dumpar o update instalado).
+**Decisão (14/10, revista em 16/10):** base = **cartucho v1.0.0** do console do [USER]; o update **v4.0.0** foi liberado
+pelo [USER] e é a versão de trabalho. Zelda continua só depois de confirmada a origem.
 
 ## XCI (lido sem chaves) ✅
 Partições HFS0: `update` (225 arquivos, firmware do cartucho), `logo`, `normal` (vazia), `secure` (o jogo, NCAs criptografados).
@@ -54,5 +54,5 @@ passa a ser prioridade.
 ## Pendências
 - [x] `keys/prod.keys` (Lockpick_RCM no console do [USER])
 - [x] Decisão de versão: **v1.0.0 do cartucho** (trocar para o update depois = refazer a geração, não o projeto)
-- [ ] Update v4.0.0 dumpado do console (nxdumptool/DBI), opcional
+- [x] Update v4.0.0 liberado pelo [USER] (16/10)
 - [ ] Teste de pipeline com o Zelda **se** o [USER] tiver o jogo (dump próprio)
