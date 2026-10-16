@@ -71,6 +71,11 @@ Ordem de trabalho (atualizada no fim de 15/10; 🟢 = provado por run_auto/teste
      capturas (o Violet segue o relógio; 1 dia = 72 min) + árvores ausentes. Com `PVR_CLOCK_START` no instante da captura
      do Eden: luminância 134,3 vs 133,2, contraste 65,5 vs 65,9, saturação 101,6 vs 99,6, diferença média 5/255 (16/10)
    - [ ] Pequeno: névoa/desfoque de distância um pouco mais suave no Eden (fundo central)
+   - [ ] **Névoa/vapor sobre as lagoas e encostas ausente** (save `lab/saves/user_lighthouse_20261016`, em cima do
+     farol, vs Eden no mesmo relógio): o Eden mostra fiapos brancos de neblina sobre as lagoas do vale e junto aos
+     paredões; no nosso nunca aparecem (3 quadros). Resto da cena igual: mesmos objetos, árvores e prédios; luminância
+     150,1 vs 151,1, saturação 103,2 vs 103,4, diferença média 7/255. Suspeita: partículas/volumes de névoa (efeito
+     semitransparente), caçar pelo `[draw]` com blend no passe HDR
    - [x] Moitas menos densas perto da placa — mesma causa das árvores, corrigido 16/10
 6. 🟢 **Áudio (5.1):** corrigido 16/10 (o build de janela usava o dispositivo de áudio falso do headless); o jogo toca pelo audout. **Confirmado pelo [USER]** (ouviu na janela, 16/10).
 7. 🟢 **Teclado do nome (5.6, swkbd):** caixa de texto na frente do jogo, no monitor do jogo + resposta em UTF-16 (o Violet não usa UTF-8). **Confirmado pelo [USER]:** digitou "Lokiju" e a ficha mostra o nome e a foto (16/10).
