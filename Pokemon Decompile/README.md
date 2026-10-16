@@ -47,6 +47,9 @@ python tools/verify/gates.py run host --version v400
 | `PVR_LOG_COPIES` `PVR_SAVE_COPY=<w>x<h>` `PVR_LOG_TEXADDR=<addr>` | cópias de textura/buffer, origem salva, texturas num endereço |
 | `PVR_NO_BRA_CC` `PVR_NO_COPY_WRITEBACK` `PVR_NO_QUADSWAP` `PVR_NO_STENCIL_VIEW` | A/B: desliga uma correção para comparar |
 | `PVR_NVN_MISSING` `PVR_DIAG_UNKNOWN` `PVR_DUMP_THREADS` `PVR_SYM_AT` | funções NVN faltantes, instruções Maxwell desconhecidas, threads, símbolos |
+| `PVR_CPUPROF=<de_s>:<até_s>` | amostra a CPU das threads do jogo (~1 ms) e grava `build/cpuprof.txt`; relatório: `tools/rea/cpuprof_report.py build/cpuprof.txt pvgame.dll pvhost.exe` |
+| `LARECOMP_VK_PROF=1` | tempo do render thread por categoria, GPU ocupada e esperas na GPU por local (`waits by site`, RVA para `addr2line`) |
+| `PVR_SUBS=<1..64>` | quantas submissões em voo o backend usa (padrão 64; o LAS usava 8) — A/B de desempenho |
 
 Detalhe de uso e armadilhas: skill `switch-static-recompilation` (referência `vulkan-backend.md`).
 

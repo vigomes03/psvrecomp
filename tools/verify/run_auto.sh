@@ -32,6 +32,7 @@ for i in 1 2 3; do
   bad=$(grep -c "FATAL\|exception c0000005" "$TAG.log")
   echo "run $i: bad=$bad last=$(grep -o 'frame [0-9]*' "$TAG.log" | tail -1) log=$H/$TAG.log"
   [ "$bad" = 0 ] && break
+  cp "$TAG.log" "$TAG.run$i.log"  # (the next try overwrites $TAG.log: keep the failed one)
 done
 python D:/Dev/REA/tools/verify/frame_stats.py build/frames/*.png | awk '{print $1, "mean", $5, "colors", $7}' | tr -d "{},'"
 [ "$bad" = 0 ]
