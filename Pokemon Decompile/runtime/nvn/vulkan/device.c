@@ -17,6 +17,7 @@
 
 VkG g_vk;
 static SDL_Window *window;
+static _Atomic int g_title_fps10 = -1;  // fps x10 for the window title (-1: not measured yet)
 static atomic_bool ui_ready;
 static VkDebugUtilsMessengerEXT messenger;
 
@@ -599,6 +600,16 @@ void backend_present(NvnTexture *t) {
         if (getenv("LARECOMP_EXIT_AFTER_SHOT") && !shot_from) { fflush(stderr); _exit(0); }
     }
     double now = SDL_GetTicks() / 1000.0;
+    {   // (PVRecomp) fps in the window title, measured every second (ui_run applies it on the window's thread)
+        static double t_title;
+        static unsigned n_title;
+        n_title++;
+        if (now - t_title >= 1.0) {
+            if (t_title > 0) atomic_store(&g_title_fps10, (int)(n_title * 10.0 / (now - t_title) + 0.5));
+            t_title = now;
+            n_title = 0;
+        }
+    }
     static double fps_iv = -1, prev_present, max_gap;
     if (fps_iv < 0) fps_iv = getenv("LARECOMP_FPS_INTERVAL") ? atof(getenv("LARECOMP_FPS_INTERVAL")) : 2.0;
     if (prev_present > 0 && now - prev_present > max_gap) max_gap = now - prev_present;
@@ -716,5 +727,13 @@ int ui_run(void) {
             input_handle_event(&e);
         }
         menu_apply_window_requests(window);
+        static int shown = -1;
+        int f = atomic_load(&g_title_fps10);
+        if (f != shown && f >= 0) {
+            char title[64];
+            snprintf(title, sizeof title, "PSV Recomp - %d.%d fps", f / 10, f % 10);
+            SDL_SetWindowTitle(window, title);
+            shown = f;
+        }
     }
 }

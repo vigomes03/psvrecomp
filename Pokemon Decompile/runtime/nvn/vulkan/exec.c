@@ -37,12 +37,15 @@ uint64_t prof_up_ns = ~0ull;  // textures.c upload checks (~0: profiling off)
 static _Atomic int stat_compiles;
 static uint64_t op_counts[CMD_COUNT];
 bool g_debug_frame;
-static char stats_text[640];
+static char stats_text[1024];
 void vk_collect_dead(void);
 
 // ================================================================== submissions
 // A submission = optional upload command buffer + the main one, signalling the timeline with its number.
-#define SUBS 8
+// (PVRecomp) LAS used 8 slots, but Violet submits ~96 command lists per frame: sub() then waited for the submission
+// 8 back on every reuse (~600 ms per 2 s in battle, CPU and GPU taking turns). 64 lets the CPU run ~2/3 of a frame
+// ahead; slots cost a lazily created descriptor pool each.
+#define SUBS 64
 typedef struct {
     VkCommandBuffer main, upload;
     bool main_begun, upload_begun, ts;  // ts: GPU timestamps written (profiling)
@@ -51,7 +54,7 @@ typedef struct {
     int npools, cur_pool;
 } Sub;
 static Sub subs[SUBS];
-static int cur_sub;
+static int cur_sub, n_subs = SUBS;  // PVR_SUBS=<n> (1..SUBS): slots actually used (A/B)
 static uint64_t submit_seq;  // last submitted
 static pthread_mutex_t seq_lock = PTHREAD_MUTEX_INITIALIZER;
 static bool in_pass;
@@ -62,7 +65,25 @@ uint64_t vk_completed_seq(void) {
     return v;
 }
 
+// (PVRecomp, profiling) LARECOMP_VK_PROF=1: GPU-wait time per call site ("waits by site" in the stats line; the
+// addresses are RVAs of pvhost.exe: `addr2line -f -e pvhost.exe 0x<0x140000000 + rva>`)
+#define WAIT_SITES 16
+static struct { uintptr_t ra; uint64_t ns, n; } wait_site[WAIT_SITES];
+static pthread_mutex_t wait_site_lock = PTHREAD_MUTEX_INITIALIZER;
+static _Thread_local uintptr_t t_wait_ra;  // set by the public entry points (renderer_flush/sync/wait_seq)
+extern char __ImageBase;
+static void wait_site_add(uintptr_t ra, uint64_t ns) {
+    ra -= (uintptr_t)&__ImageBase;
+    pthread_mutex_lock(&wait_site_lock);
+    int i = 0;
+    while (i < WAIT_SITES && wait_site[i].ra && wait_site[i].ra != ra) i++;
+    if (i < WAIT_SITES) { wait_site[i].ra = ra; wait_site[i].ns += ns; wait_site[i].n++; }
+    pthread_mutex_unlock(&wait_site_lock);
+}
+
 void vk_wait_seq(uint64_t seq) {
+    uintptr_t ra = t_wait_ra ? t_wait_ra : (uintptr_t)__builtin_return_address(0);
+    t_wait_ra = 0;
     if (!seq) return;
     VkSemaphoreWaitInfo wi = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO, .semaphoreCount = 1, .pSemaphores = &g_vk.timeline,
                               .pValues = &seq};
@@ -70,6 +91,7 @@ void vk_wait_seq(uint64_t seq) {
     VkResult r = vkWaitSemaphores(g_vk.dev, &wi, 10ull * 1000000000ull);
     stat_wait_ns += SDL_GetTicksNS() - t0;
     cum_wait += SDL_GetTicksNS() - t0;
+    if (prof > 0) wait_site_add(ra, SDL_GetTicksNS() - t0);
     if (r == VK_TIMEOUT) LOG("[vk] GPU did not finish submission %llu within 10 s (device lost?)\n", (unsigned long long)seq);
     else if (r != VK_SUCCESS) {
         extern void vk_devlost_dump(void);
@@ -237,7 +259,7 @@ void vk_submit_extra(VkSemaphore wait, VkSemaphore signal, VkCommandBuffer extra
     pthread_mutex_lock(&seq_lock);
     submit_seq++;
     pthread_mutex_unlock(&seq_lock);
-    cur_sub = (cur_sub + 1) % SUBS;
+    cur_sub = (cur_sub + 1) % n_subs;
     stat_flushes++;
     cum_submits++;
     ring_retire();
@@ -246,12 +268,15 @@ void vk_submit_extra(VkSemaphore wait, VkSemaphore signal, VkCommandBuffer extra
 
 void renderer_submit(void) { vk_submit_extra(VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE); }
 
-void renderer_flush(void) {
+__attribute__((noinline)) void renderer_flush(void) {
+    uintptr_t ra = (uintptr_t)__builtin_return_address(0);
     renderer_submit();
+    t_wait_ra = ra;
     vk_wait_seq(submit_seq);
 }
 
-void renderer_sync(void) {
+__attribute__((noinline)) void renderer_sync(void) {
+    t_wait_ra = (uintptr_t)__builtin_return_address(0);
     pthread_mutex_lock(&seq_lock);
     uint64_t s = submit_seq;
     pthread_mutex_unlock(&seq_lock);
@@ -265,8 +290,9 @@ uint64_t renderer_fence_seq(void) {
     return q;
 }
 
-void renderer_wait_seq(uint64_t seq) {
+__attribute__((noinline)) void renderer_wait_seq(uint64_t seq) {
     if (!seq) return;
+    t_wait_ra = (uintptr_t)__builtin_return_address(0);
     pthread_mutex_lock(&seq_lock);
     uint64_t s = submit_seq;
     pthread_mutex_unlock(&seq_lock);
@@ -574,6 +600,16 @@ const char *renderer_stats(void) {
         memset(prof_end_line, 0, sizeof prof_end_line);
         n = strlen(stats_text);
         snprintf(stats_text + n, sizeof stats_text - n, " | views created %llu", (unsigned long long)prof_views_created);
+        pthread_mutex_lock(&wait_site_lock);
+        n = strlen(stats_text);
+        snprintf(stats_text + n, sizeof stats_text - n, " | waits by site:");
+        for (int i = 0; i < WAIT_SITES && wait_site[i].ra; i++) {
+            n = strlen(stats_text);
+            snprintf(stats_text + n, sizeof stats_text - n, " %llx:%.0fms/%llu", (unsigned long long)wait_site[i].ra,
+                     wait_site[i].ns / 1e6, (unsigned long long)wait_site[i].n);
+            wait_site[i].ns = wait_site[i].n = 0;
+        }
+        pthread_mutex_unlock(&wait_site_lock);
         prof_views_created = 0;
         prof_tex_checks = prof_tex_samples = prof_tex_full = prof_tex_full_bytes = prof_tex_dyn = 0;
         prof_exec = prof_draw = prof_sets = prof_vtx = prof_submit = prof_pre = prof_key = prof_dyn = prof_tex = prof_up = prof_gpu = 0;
@@ -625,6 +661,7 @@ static void st_defaults(void) {
 }
 
 void vk_exec_init(void) {
+    if (getenv("PVR_SUBS") && atoi(getenv("PVR_SUBS")) >= 1 && atoi(getenv("PVR_SUBS")) <= SUBS) n_subs = atoi(getenv("PVR_SUBS"));
     prof = getenv("LARECOMP_VK_PROF") != NULL;
     if (prof) {
         prof_up_ns = 0;
@@ -1611,11 +1648,9 @@ static bool gmem_import(uint64_t size) {
     VkBuffer buf;
     VkDeviceMemory mem;
     if (!host_import(HEAP_BASE, size, &buf, &mem)) return false;
-    if (gmem_buf) {  // the heap grew: the old import may still be in use by submitted work
-        vk_wait_seq(submit_seq);
-        vkDestroyBuffer(g_vk.dev, gmem_buf, NULL);
-        vkFreeMemory(g_vk.dev, gmem_mem, NULL);
-    }
+    // the heap grew: the old import may still be in use by submitted work AND by the open submission (PVRecomp:
+    // same use-after-free as the gwin windows), so it is destroyed once the open submission completes
+    if (gmem_buf) vk_defer_buffer(gmem_buf, gmem_mem);
     gmem_buf = buf;
     gmem_mem = mem;
     gmem_size = size;
@@ -1658,11 +1693,11 @@ static void gwin_refresh(void) {
             LOG("[vk] gwin %d import failed: %llx +%llu MB\n", w, (unsigned long long)out[k].base, (unsigned long long)(out[k].size >> 20));
             continue;
         }
-        if (gwin[w].buf) {
-            vk_wait_seq(submit_seq);
-            vkDestroyBuffer(g_vk.dev, gwin[w].buf, NULL);
-            vkFreeMemory(g_vk.dev, gwin[w].mem, NULL);
-        }
+        // (PVRecomp) the window can change in the middle of recording (gwin_refresh before a draw/dispatch): the
+        // open submission may already reference the old buffer, so waiting for the submitted ones and destroying
+        // it was a use-after-free on the GPU (device fault "address write invalid", DEVICE_LOST at Violet's first
+        // battle once the game ran faster). Keep it until the open submission completes.
+        if (gwin[w].buf) vk_defer_buffer(gwin[w].buf, gwin[w].mem);
         gwin[w].base = out[k].base; gwin[w].size = out[k].size; gwin[w].buf = buf; gwin[w].mem = mem;
         LOG("[vk] gwin %d: %llx +%llu MB (%d pools outside the heap)\n", w, (unsigned long long)out[k].base,
             (unsigned long long)(out[k].size >> 20), n);

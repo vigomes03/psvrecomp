@@ -171,9 +171,11 @@ void rt_unwind_point(void) {
     if (__builtin_expect(g_rt_unwind, 0) && t_cur) longjmp(t_cur->unwind, 1);
 }
 
+void cpuprof_register_thread(const Cpu *cpu, uint32_t guest_handle);  // (PVRecomp) cpuprof.c, PVR_CPUPROF
 static void *thread_main(void *arg) {
     KThread *t = arg;
     t_cur = t;
+    cpuprof_register_thread(&t->cpu, t->handle);
     crash_handler_install();
     rt_set_fpcr(0);
     if (!setjmp(t->unwind)) guest_call(&t->cpu, t->entry);
@@ -332,16 +334,14 @@ static uint32_t block_current(int64_t timeout_ns) {
             t->wait_result = R_CANCELLED;
             break;
         }
-        if (t->cancel && t->wait_kind == WAIT_ARBITER) {
-            // Only WaitSynchronization and the address arbiter observe svcCancelSynchronization. Mutex / condvar
-            // waits must leave the flag for the thread's next WaitSynchronization: nn::os MultiWait on user-mode
-            // events relies on it (PVRecomp: a mutex wait ate the cancel and the main thread slept forever in
-            // WaitSynchronizationN on 0 handles, v400 14/10).
-            t->cancel = false;
-            t->wait_kind = WAIT_NONE;
-            t->wait_result = R_CANCELLED;
-            break;
-        }
+        // svcCancelSynchronization is observed ONLY by WaitSynchronization (svc_wait_synchronization checks
+        // t->cancel itself). Horizon marks just that wait cancellable (Mesosphere KSynchronizationObject::Wait ->
+        // SetCancellable; KThread::WaitCancel otherwise only sets m_wait_cancelled): mutex, condvar AND address-arbiter
+        // waits leave the flag for the thread's next WaitSynchronization.
+        //  - a mutex wait that ate the cancel left the main thread asleep in WaitSynchronizationN on 0 handles
+        //    (PVRecomp, v400 14/10);
+        //  - an arbiter wait that returned R_CANCELLED made nn::os abort (LightEvent WaitForAddress accepts only
+        //    0 / InvalidState: svcBreak 2001-0118 while Violet's first battle loads, PVRecomp 15/10).
         if (!kwait(timeout_ns, &ts)) {
             // A waker may have handed us the object (e.g. mutex ownership) between the timeout and us retaking
             // g_klock: then the wait succeeded. Overwriting it with R_TIMEOUT made nn::os re-Enter a mutex the

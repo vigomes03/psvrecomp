@@ -227,7 +227,8 @@ void vk_image_init_layout(VkCommandBuffer cb, VkImage img, VkImageAspectFlags as
 }
 
 // Images destroyed by the guest are kept until the submissions that may use them have completed.
-typedef struct { VkImage img; VmaAllocation mem; VkImageView view; uint64_t seq; } Dead;
+// (PVRecomp) also plain buffers + their memory (gwin windows replaced while the open submission still uses them)
+typedef struct { VkImage img; VmaAllocation mem; VkImageView view; VkBuffer buf; VkDeviceMemory devmem; uint64_t seq; } Dead;
 static Dead *dead;
 static int ndead, cap_dead;
 static void views_forget(TexBackend *b);
@@ -238,6 +239,7 @@ void vk_collect_dead(void) {
     for (int i = 0; i < ndead; i++) {
         if (dead[i].seq > done) { dead[k++] = dead[i]; continue; }
         if (dead[i].view) vkDestroyImageView(g_vk.dev, dead[i].view, NULL);
+        else if (dead[i].buf) { vkDestroyBuffer(g_vk.dev, dead[i].buf, NULL); vkFreeMemory(g_vk.dev, dead[i].devmem, NULL); }
         else vmaDestroyImage(g_vk.vma, dead[i].img, dead[i].mem);
     }
     ndead = k;
@@ -350,6 +352,7 @@ static void defer(Dead d) {
 
 void vk_defer_image(VkImage img, VmaAllocation mem) { defer((Dead){.img = img, .mem = mem}); }
 void vk_defer_view(VkImageView v) { defer((Dead){.view = v}); }
+void vk_defer_buffer(VkBuffer buf, VkDeviceMemory mem) { defer((Dead){.buf = buf, .devmem = mem}); }
 
 void vk_dl_note_upload(void *img, uint32_t w, uint32_t h, uint32_t lv);  // (exec.c: LARECOMP_VK_DEVLOST_TRACE)
 
