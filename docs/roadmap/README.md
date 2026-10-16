@@ -78,12 +78,10 @@ Ordem de trabalho (atualizada no fim de 15/10; 🟢 = provado por run_auto/teste
   o objeto já estaria pronto). Logs: `lab/host-vk/stb3_3.run1.log`, `xs3.run1.log`, `stab_7.run1.log`,
   `stab_8.run1.log`. Adiado por decisão do [USER] (15/10).
 
-- **Crash de vtable corrompida no mundo aberto** (16/10, jogo manual do [USER], ~190 s após carregar
-  `auto_pos_batalha_20261015`, apertando A): `FATAL: no function at 7002a1fc24 (lr=7000fc3968)`. Chamada virtual
-  `blr` de `vtable[0x68]` do objeto em x19 em `f_7000fc38dc <- f_7000fc363c <- f_7000fc3528 <- f_700126826c`.
-  O alvo é meio de função (usa x19 sem prólogo) e NENHUMA das 157 902 relocações relativas do main aponta para ele:
-  não é erro de tradução, é ponteiro de objeto/vtable corrompido em runtime (use-after-free ou race), mesma família
-  do crash acima. Log: `lab/host-vk/crash_vtable_pos_batalha_20261016.log`. 1 ocorrência até agora.
+- ~~Crash antes do Poco Path (`no function at 7002a1fc24`)~~ — corrigido em 16/10. Primeiro registrado como
+  "vtable corrompida" (ERRADO: era determinístico, sempre no mesmo endereço). Causa real no gen.py: um switch de 11
+  casos em `f_7002a1f54c` teve a função partida onde uma função vizinha pula para o meio dela (cauda compartilhada);
+  os casos depois do corte eram rejeitados e caíam no dispatch global. Ver pipeline-log 16/10.
 
 - ~~Personagem invisível no mundo aberto~~ — corrigido em 15/10 (occlusion query reportava 0 pixels; ver pipeline-log).
 

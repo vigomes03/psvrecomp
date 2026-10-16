@@ -160,6 +160,25 @@ static GuestFn dispatch_slow(Cpu *c) {
     if (!f) {
         uint64_t off;
         const char *s = loader_symbol_at(c->x[30], &off);
+        // (PVRecomp) guest state for a bad indirect call: registers, then the object in x0 and its vtable (a bad
+        // blr is usually obj->vtable[n]), read through plat_safe_read so a wild pointer can't fault the report
+        extern int plat_safe_read(uint64_t addr, void *out, size_t n);
+        for (int i = 0; i < 31; i += 4)
+            LOG("[fatal-regs] x%-2d %016llx %016llx %016llx %016llx\n", i, (unsigned long long)c->x[i],
+                (unsigned long long)(i + 1 < 31 ? c->x[i + 1] : c->sp), (unsigned long long)(i + 2 < 31 ? c->x[i + 2] : 0),
+                (unsigned long long)(i + 3 < 31 ? c->x[i + 3] : 0));
+        LOG("[fatal-regs] sp %016llx\n", (unsigned long long)c->sp);
+        uint64_t obj[8] = {0}, vt[16] = {0};
+        if (plat_safe_read(c->x[0], obj, sizeof obj)) {
+            LOG("[fatal-regs] [x0]:");
+            for (int i = 0; i < 8; i++) LOG(" %016llx", (unsigned long long)obj[i]);
+            LOG("\n");
+            if (plat_safe_read(obj[0], vt, sizeof vt)) {
+                LOG("[fatal-regs] [[x0]] (vtable?):");
+                for (int i = 0; i < 16; i++) LOG(" %016llx", (unsigned long long)vt[i]);
+                LOG("\n");
+            }
+        }
         FATAL("no function at %llx (lr=%llx %s+%llx)\n", pc, c->x[30], s ? s : "?", off);
     }
     unsigned h = (unsigned)(pc >> 2) & (DCACHE - 1);

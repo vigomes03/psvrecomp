@@ -276,6 +276,12 @@ int plat_text_prompt(const char *title, const char *initial, int max_len, char *
     return 1;
 }
 
+// (PVRecomp) read memory that may be unmapped (crash reports): 1 = read ok
+int plat_safe_read(uint64_t addr, void *out, size_t n) {
+    SIZE_T got = 0;
+    return addr && ReadProcessMemory(GetCurrentProcess(), (LPCVOID)(uintptr_t)addr, out, n, &got) && got == n;
+}
+
 void plat_init(void) {
     log_to_file_without_console();
     require_cpu();

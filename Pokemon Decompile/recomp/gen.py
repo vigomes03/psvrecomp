@@ -105,7 +105,19 @@ class Module:
             if typ == R_AARCH64_RELATIVE:
                 starts.add(b + add)
         starts = sorted(a for a in starts if self.in_text(a))
+        self.bstarts = starts
         return starts
+
+    def same_boundary(self, pc, t):
+        """(PVRecomp) t lies in the same eh_frame/symbol/relocation function as pc. Functions get split where
+        another function branches into them (shared tails), so a switch's cases can land beyond the split piece
+        that holds its br (Violet f_7002a1f54c: cases fc24..fd00 after splits at f89c..fd00 -> `no function at
+        7002a1fc24` before Poco Path). Such targets stay valid table entries; they become entries of their own."""
+        bs = getattr(self, 'bstarts', None)
+        if not bs or not self.in_text(t):
+            return False
+        k = bisect.bisect_right(bs, pc) - 1
+        return k >= 0 and bs[k] <= t < (bs[k + 1] if k + 1 < len(bs) else self.hi)
 
     # ------------------------------------------------------------ jump tables
 
@@ -193,7 +205,7 @@ class Module:
                     return None
                 t = mu.reg_read(A.UC_ARM64_REG_X0 + rn if rn < 29 else
                                 (A.UC_ARM64_REG_X29 if rn == 29 else A.UC_ARM64_REG_X30))
-                if not (entry <= t < end) or t % 4:
+                if t % 4 or not (entry <= t < end or self.same_boundary(br_pc, t)):
                     return None
                 out.append(t)
             return out
@@ -308,7 +320,7 @@ class Module:
                     return None
                 t = mu.reg_read(A.UC_ARM64_REG_X0 + rn if rn < 29 else
                                 (A.UC_ARM64_REG_X29 if rn == 29 else A.UC_ARM64_REG_X30))
-                if not (entry <= t < end) or t % 4:
+                if t % 4 or not (entry <= t < end or self.same_boundary(br_pc, t)):
                     return None
                 out.append(t)
             return out
@@ -361,7 +373,8 @@ class Module:
                 jt = self.jump_table(a, entry, end)
                 if jt:
                     tables[a] = jt
-                    labels.update(jt)
+                    labels.update(t for t in jt if entry <= t < end)
+                    ext.update(t for t in jt if not entry <= t < end)  # (cases past a split: own entries)
                     self.stats['jumptables'] += 1
                 elif self.computed_target(a, entry):
                     # unresolved table jump: allow jumping to any instruction of the function
@@ -502,7 +515,7 @@ class Module:
                     out.append(f'    c->pc = {ins.target}; goto L_dispatch;')
                     continue
                 if jt:
-                    cases = ' '.join(f'case {hx(t)}: goto L_{t:x};' for t in jt)
+                    cases = ' '.join(f'case {hx(t)}: {jump(t)}' for t in jt)
                     out.append(f'    switch ({ins.target}) {{ {cases} default: break; }}')
                     if all_labels:
                         out.append(f'    c->pc = {ins.target}; goto L_dispatch;')
