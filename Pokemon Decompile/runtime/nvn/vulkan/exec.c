@@ -26,7 +26,7 @@ static uint64_t ft_exec_ns, ft_upload_bytes, ft_pending;
 static _Atomic uint64_t ft_compiles;
 #define SKIP(i) do { stat_skipped++; stat_skip_why[(i)]++; if ((i) == 0 || (i) == 3 || (i) == 8) ft_pending++; return; } while (0)
 static uint64_t stat_draws, stat_skipped, stat_passes, stat_dispatches, stat_wait_ns, stat_flushes, stat_feedback_copies;
-static uint64_t stat_upload_bytes; static uint64_t stat_indirect, stat_indirect_fail;  // (PVRecomp: indirect draws run / without a GPU buffer)
+static uint64_t stat_upload_bytes; static uint64_t stat_dclamp, stat_rdiscard, stat_conserv; static uint64_t stat_indirect, stat_indirect_fail;  // (PVRecomp: indirect draws run / without a GPU buffer)
 // LARECOMP_VK_PROF=1: render-thread time per category in the fps log (exec = whole command lists, draw = draw(),
 // sets = descriptor sets incl. cbuf copies, vtx = index scan + vertex copies, submit = vkQueueSubmit2)
 static int prof = -1;
@@ -548,6 +548,7 @@ static struct {
     float blend_color[4];
     uint32_t stencil_ref[2], stencil_mask[2], stencil_vmask[2];
     bool prim_restart;
+    bool depth_clamp, raster_discard, conservative;  // (PVRecomp)
     uint32_t restart_index;
     uint64_t copy_row_stride, copy_image_stride;
 } st;
@@ -620,8 +621,10 @@ const char *renderer_stats(void) {
     }
     {
         size_t n = strlen(stats_text);
-        snprintf(stats_text + n, sizeof stats_text - n, " | indirect %llu (fail %llu) | skip why:",
-                 (unsigned long long)stat_indirect, (unsigned long long)stat_indirect_fail);
+        snprintf(stats_text + n, sizeof stats_text - n, " | indirect %llu (fail %llu) | dclamp %llu rdiscard %llu conserv %llu | skip why:",
+                 (unsigned long long)stat_indirect, (unsigned long long)stat_indirect_fail, (unsigned long long)stat_dclamp,
+                 (unsigned long long)stat_rdiscard, (unsigned long long)stat_conserv);
+        stat_dclamp = stat_rdiscard = stat_conserv = 0;
         stat_indirect = stat_indirect_fail = 0;
         for (int i = 0; i < 11; i++)
             if (stat_skip_why[i]) { n = strlen(stats_text); snprintf(stats_text + n, sizeof stats_text - n, " %s %llu", skip_why_name[i], (unsigned long long)stat_skip_why[i]); }
@@ -1447,7 +1450,7 @@ typedef struct {
     uint32_t attr_mask;
     uint32_t stride[17], divisor[17], used_streams;
     uint8_t blend[8][8];
-    uint8_t blend_on, a2c, topo_class, poly_fill;
+    uint8_t blend_on, a2c, topo_class, poly_fill, depth_clamp, pad_[3];
     uint32_t write_mask[8];
 } PipeKey;
 
@@ -1501,7 +1504,8 @@ static void build_pipeline(void *arg) {
                                                  .topology = topo_class_base(k->topo_class)};
     VkPipelineViewportStateCreateInfo vs = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO, .viewportCount = 1, .scissorCount = 1};
     VkPipelineRasterizationStateCreateInfo rs = {.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-                                                 .polygonMode = k->poly_fill ? VK_POLYGON_MODE_FILL : VK_POLYGON_MODE_LINE, .lineWidth = 1};
+                                                 .polygonMode = k->poly_fill ? VK_POLYGON_MODE_FILL : VK_POLYGON_MODE_LINE, .lineWidth = 1,
+                                                 .depthClampEnable = k->depth_clamp};
     VkPipelineMultisampleStateCreateInfo ms = {.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
                                                .rasterizationSamples = (VkSampleCountFlagBits)k->samples, .alphaToCoverageEnable = k->a2c};
     VkPipelineDepthStencilStateCreateInfo ds = {.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
@@ -2545,6 +2549,11 @@ static void draw_(CmdRec *r, bool indexed) {
         for (int b = 0; b < 4; b++)
             if (vkey.xfb_ncomp[b] && (xs_idx[b] = xs_region(xfb.addr[b], xfb.size[b])) < 0) SKIP(7);  // (can't: room checked)
 
+    {   // (PVRecomp, diag) how many draws run with the states that used to be ignored
+        if (st.depth_clamp) stat_dclamp++;
+        if (st.raster_discard) stat_rdiscard++;
+        if (st.conservative) stat_conserv++;
+    }
     uint32_t mode = (uint32_t)r->x[0];
     VkPrimitiveTopology topo;
     uint8_t cls;
@@ -2598,6 +2607,11 @@ static void draw_(CmdRec *r, bool indexed) {
     k.a2c = st.ms[0xC] != 0;
     k.topo_class = cls;
     k.poly_fill = st.poly[2] != 1;
+    {   // (PVRecomp) SetDepthClamp: geometry past the near/far planes is clamped, not clipped. PVR_NO_DEPTH_CLAMP=1: off (A/B)
+        static int off = -1;
+        if (off < 0) off = getenv("PVR_NO_DEPTH_CLAMP") != NULL;
+        k.depth_clamp = st.depth_clamp && !off;
+    }
     uint64_t ph = hash_words(0xcbf29ce484222325ull, &k, sizeof k);
     if (!ph) ph = 1;
     uint32_t pslot = (uint32_t)(ph ^ (ph >> 29)) & (PIPE_TAB - 1);
@@ -3816,6 +3830,9 @@ static void exec_list(uint64_t handle, int depth) {
             if (r->x[1]) nvn_sync_set_seq(r->x[1], renderer_fence_seq());
             break;
         }
+        case CMD_SET_DEPTH_CLAMP: st.depth_clamp = r->x[0] != 0; break;
+        case CMD_SET_RASTER_DISCARD: st.raster_discard = r->x[0] != 0; break;
+        case CMD_SET_CONSERVATIVE: st.conservative = r->x[0] != 0; break;
         case CMD_SIGNAL_EVENT: case CMD_REPORT_VALUE: {
             // (PVRecomp) GPU-time writes the CPU polls: SignalEvent(event, mode, location, flags, value) writes the event's
             // u32; ReportValue(value, address) writes a u32 at an address. Both were dropped, so the game never saw its

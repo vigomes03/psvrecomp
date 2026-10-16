@@ -149,6 +149,18 @@ static GuestFn dispatch_slow(Cpu *c) {
             if (trace)
                 LOG("[hle-call] %s lr=%llx x0=%llx x1=%llx\n", hle_slots[i].name, (unsigned long long)c->x[30],
                     (unsigned long long)c->x[0], (unsigned long long)c->x[1]);
+            static int count = -1;  // PVR_HLE_COUNT=1: calls per HLE function, dumped every 2^k total calls from 2^22
+            if (count < 0) count = getenv("PVR_HLE_COUNT") != NULL;
+            if (count) {
+                static _Atomic uint64_t calls[MAX_HLE], total;
+                calls[i]++;
+                uint64_t t = ++total;
+                if (t >= (1ull << 22) && (t & (t - 1)) == 0) {
+                    LOG("[hle-count] after %llu calls:\n", (unsigned long long)t);
+                    for (int k = 0; k < hle_count; k++)
+                        if (calls[k]) LOG("[hle-count] %llu %s\n", (unsigned long long)calls[k], hle_slots[k].name);
+                }
+            }
             if (hle_slots[i].fn) return hle_slots[i].fn;
             unimpl_pc = pc;
             return hle_unimplemented;

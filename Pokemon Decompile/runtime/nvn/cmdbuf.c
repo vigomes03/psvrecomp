@@ -275,9 +275,9 @@ NVN(nvnCommandBufferSetRenderEnableConditional) {  // (PVRecomp, diag) still ign
     }
     n++;
 }
-NVN(nvnCommandBufferSetDepthClamp) { (void)c; }
-NVN(nvnCommandBufferSetRasterizerDiscard) { (void)c; }
-NVN(nvnCommandBufferSetConservativeRasterEnable) { (void)c; }
+PLAIN(nvnCommandBufferSetDepthClamp, CMD_SET_DEPTH_CLAMP)                       // (PVRecomp: were empty)
+PLAIN(nvnCommandBufferSetRasterizerDiscard, CMD_SET_RASTER_DISCARD)
+PLAIN(nvnCommandBufferSetConservativeRasterEnable, CMD_SET_CONSERVATIVE)
 NVN(nvnCommandBufferSetConservativeRasterDilate) { (void)c; }
 NVN(nvnCommandBufferSetSubpixelPrecisionBias) { (void)c; }
 NVN(nvnCommandBufferSetViewportSwizzles) { (void)c; }
