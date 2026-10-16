@@ -266,7 +266,15 @@ PLAIN(nvnCommandBufferSetLineWidth, CMD_SET_LINE_WIDTH)
 PLAIN(nvnCommandBufferSetPointSize, CMD_SET_POINT_SIZE)
 PLAIN(nvnCommandBufferSetSampleMask, CMD_SET_SAMPLE_MASK)
 PLAIN(nvnCommandBufferSetRenderEnable, CMD_SET_RENDER_ENABLE)
-NVN(nvnCommandBufferSetRenderEnableConditional) { (void)c; }
+NVN(nvnCommandBufferSetRenderEnableConditional) {  // (PVRecomp, diag) still ignored: how often, with what?
+    static uint64_t n;
+    if ((n & (n + 1)) == 0 || n % 5000 == 0) {
+        const uint32_t *w = (const uint32_t *)(uintptr_t)c->x[2];
+        LOG("[condrender] #%llu mode %llu addr %llx words %u %u %u %u\n", (unsigned long long)n + 1, (unsigned long long)c->x[1],
+            (unsigned long long)c->x[2], w ? w[0] : 0, w ? w[1] : 0, w ? w[2] : 0, w ? w[3] : 0);
+    }
+    n++;
+}
 NVN(nvnCommandBufferSetDepthClamp) { (void)c; }
 NVN(nvnCommandBufferSetRasterizerDiscard) { (void)c; }
 NVN(nvnCommandBufferSetConservativeRasterEnable) { (void)c; }

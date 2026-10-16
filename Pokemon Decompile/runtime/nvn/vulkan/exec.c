@@ -697,6 +697,93 @@ static int debug_pass_no;
 
 static bool in_xfb_pass, want_xfb_pass;  // (PVRecomp) shared attachment-less pass for transform feedback (begin_pass)
 static void xs_flush(VkCommandBuffer cb);
+// (PVRecomp) Render-target write-back, PVR_RT_WRITEBACK=1 (A/B, slow). What the GPU renders into a texture stays in
+// its VkImage; the guest memory behind it is never updated. The Switch has one memory: the game (CPU, or another
+// texture object over the same bytes) can read what the GPU drew. yuzu's "High" GPU accuracy downloads such data,
+// and Violet loses trees / buildings without it. Here: at the end of each pass every colour target's level is copied
+// to a host buffer; after the frame's GPU work is done (present) the texels are swizzled into guest memory.
+static RtState rtwb_pass_rt;
+typedef struct { NvnTexture *t; uint32_t lv, ly; VkBuffer buf; VmaAllocation mem; void *ptr; uint64_t cap, size; bool used; } RtWb;
+#define RTWB_MAX 512
+static RtWb rtwb[RTWB_MAX];
+static uint64_t rtwb_stat_n, rtwb_stat_bytes, rtwb_stat_skip, rtwb_stat_full;
+static int rtwb_on(void) {
+    static int on = -1;
+    if (on < 0) on = getenv("PVR_RT_WRITEBACK") && atoi(getenv("PVR_RT_WRITEBACK")) != 0;
+    return on;
+}
+static void rtwb_queue(NvnTexture *t, const NvnTextureView *v, bool has_view, VkCommandBuffer cb) {
+    if (!t || !t->addr || !t->backend) return;
+    const FormatInfo *fi = t->layout.fmt;
+    TexBackend *b = t->backend;
+    float sx, sy;
+    renderer_texture_scale(t, &sx, &sy);
+    if (!fi || !fi->bpb || fi->bpb == 3 || fi->bw != 1 || fi->bh != 1 || fi->kind != FMT_COLOR || sx != 1 || sy != 1 ||
+        b->depth > 1 || b->samples > 1 || !(b->aspect & VK_IMAGE_ASPECT_COLOR_BIT)) { rtwb_stat_skip++; return; }
+    uint32_t lv = has_view && (v->setmask & 1) ? v->base_level : 0;
+    uint32_t ly = has_view && (v->setmask & 2) ? v->min_layer : 0;
+    if (lv >= b->levels || ly >= b->layers) { rtwb_stat_skip++; return; }
+    LevelLayout l = tegra_level(&t->layout, lv);
+    uint64_t size = (uint64_t)l.wb * l.hb * fi->bpb;
+    int k = -1, fr = -1;
+    for (int i = 0; i < RTWB_MAX; i++) {
+        if (rtwb[i].used && rtwb[i].t == t && rtwb[i].lv == lv && rtwb[i].ly == ly) { k = i; break; }
+        if (!rtwb[i].used && fr < 0 && (rtwb[i].cap >= size || !rtwb[i].buf)) fr = i;
+    }
+    if (k < 0) k = fr;
+    if (k < 0) { rtwb_stat_full++; return; }
+    RtWb *e = &rtwb[k];
+    if (e->cap < size) {
+        uint64_t cap = (size + 0xFFFF) & ~0xFFFFull;
+        VkBufferCreateInfo bi = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = cap, .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT};
+        VmaAllocationCreateInfo ai = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST,
+                                      .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT};
+        VmaAllocationInfo info;
+        if (vmaCreateBuffer(g_vk.vma, &bi, &ai, &e->buf, &e->mem, &info) != VK_SUCCESS) { e->buf = VK_NULL_HANDLE; rtwb_stat_full++; return; }
+        e->ptr = info.pMappedData;
+        e->cap = cap;
+    }
+    e->t = t; e->lv = lv; e->ly = ly; e->size = size; e->used = true;
+    vk_full_barrier(cb);
+    VkBufferImageCopy c = {.bufferOffset = 0, .bufferRowLength = l.w, .bufferImageHeight = l.h,
+                           .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, lv, ly, 1},
+                           .imageExtent = {l.w < b->width >> lv ? l.w : (b->width >> lv ? b->width >> lv : 1),
+                                           l.h < b->height >> lv ? l.h : (b->height >> lv ? b->height >> lv : 1), 1}};
+    vkCmdCopyImageToBuffer(cb, b->image, VK_IMAGE_LAYOUT_GENERAL, e->buf, 1, &c);
+    vk_full_barrier(cb);
+}
+void renderer_sync(void);
+void vk_rt_writeback_frame(uint64_t frame) {
+    if (!rtwb_on()) return;
+    bool any = false;
+    for (int i = 0; i < RTWB_MAX && !any; i++) any = rtwb[i].used;
+    if (any) {
+        renderer_sync();  // (the frame's copies are done)
+        for (int i = 0; i < RTWB_MAX; i++) {
+            RtWb *e = &rtwb[i];
+            if (!e->used) continue;
+            e->used = false;
+            NvnTexture *t = e->t;
+            const FormatInfo *fi = t->layout.fmt;
+            LevelLayout l = tegra_level(&t->layout, e->lv);
+            uint8_t *dst = (uint8_t *)(uintptr_t)t->addr + (uint64_t)e->ly * tegra_layer_size(&t->layout) + l.offset;
+            if (t->flags & 0x10) {  // linear: rows at the texture's stride
+                if (!t->stride) continue;
+                for (uint32_t y = 0; y < l.hb; y++) memcpy(dst + (uint64_t)y * t->stride, (const uint8_t *)e->ptr + (uint64_t)y * l.wb * fi->bpb, (size_t)l.wb * fi->bpb);
+            } else {
+                tegra_swizzle(e->ptr, dst, l.wb, l.hb, 1, fi->bpb, l.block_height_log2, 0);
+            }
+            rtwb_stat_n++;
+            rtwb_stat_bytes += e->size;
+        }
+    }
+    if (frame % 150 == 0)
+        LOG("[rtwb] frame %llu: %llu written back (%.1f MB), %llu skipped (format/scale/3D/MSAA), %llu no slot\n",
+            (unsigned long long)frame, (unsigned long long)rtwb_stat_n, rtwb_stat_bytes / 1048576.0, (unsigned long long)rtwb_stat_skip,
+            (unsigned long long)rtwb_stat_full);
+    if (frame % 150 == 0) rtwb_stat_n = rtwb_stat_bytes = rtwb_stat_skip = rtwb_stat_full = 0;
+}
+
 static void vk_end_pass_at(int line);
 void vk_end_pass(void) { vk_end_pass_at(0); }
 #define vk_end_pass() vk_end_pass_at(__LINE__)
@@ -706,6 +793,9 @@ static void vk_end_pass_at(int line) {
     vkCmdEndRendering(vk_cmd());
     in_pass = false;
     if (in_xfb_pass) { in_xfb_pass = false; xs_flush(vk_cmd()); }  // captured vertices -> guest memory
+    if (rtwb_on())
+        for (int i = 0; i < rtwb_pass_rt.ncolor && i < 8; i++)
+            if (rtwb_pass_rt.color[i]) rtwb_queue(rtwb_pass_rt.color[i], &rtwb_pass_rt.cview[i], rtwb_pass_rt.has_cview[i], vk_cmd());
     if (g_debug_frame && st.rt.ncolor && (!st.rt.color[0] || !st.rt.color[0]->backend) && getenv("PVR_DIAG_ALLRT")) {
         // (PVRecomp) G-buffer passes start at target 1: save their targets too (pass_<n>_rt<i>.png)
         for (int i = 1; i < st.rt.ncolor && i < 8; i++)
@@ -764,6 +854,7 @@ static void begin_pass(void) {
     uint32_t w = 0, minw = UINT32_MAX, minh = UINT32_MAX;  // w: first attachment seen
     uint32_t pass_layers = 1;
     pass_ncolor = want_xfb_pass ? 0 : (uint32_t)st.rt.ncolor;  // (xfb pass: no attachments, their state untouched)
+    rtwb_pass_rt = st.rt;  // (PVRecomp) the targets this pass writes (st.rt can change before the pass ends)
     pass_samples = 1;
     for (int i = 0; i < (int)pass_ncolor; i++) {
         NvnTexture *t = st.rt.color[i];
