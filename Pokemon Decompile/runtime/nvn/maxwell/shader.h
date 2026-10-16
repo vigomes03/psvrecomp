@@ -47,6 +47,8 @@ typedef struct {
     // v<xfb_out[b]> at xfb_stride[b] bytes per vertex; addresses come from the per-draw UBO at binding 19
     uint8_t xfb_ncomp[4], xfb_out[4];
     uint16_t xfb_stride[4];
+    uint8_t xfb_scratch;    // (PVRecomp) xfb_store writes to the device-local buffer at binding 30 (byte offset from
+                            // the binding-19 UBO), copied to guest memory when the xfb pass ends (exec.c xs_*)
     uint64_t tex_uint;      // (PVRecomp) textures i read as unsigned integers (stencil of a depth-stencil texture)
 } ShaderKey;
 

@@ -2386,9 +2386,16 @@ static ShaderInfo *glsl_finish(Ctx *c, bool any_branch, bool dbg) {
                    "{ off = a - b; return i; } } off = 0ul; return %du; }\n", GMEM_WINDOWS, GMEM_WINDOWS);
             if (xfb) {  // transform feedback (PVRecomp): xfb[b] = (address lo, hi, byte offset, first vertex)
                 sp(&s, "layout(std140, set = %d, binding = 19) uniform XfbB { uvec4 xfb[4]; };\n", set);
+                if (key->xfb_scratch) {  // device-local scratch (PVRecomp): host-memory stores over PCIe cost ~17 ms/frame
+                    sp(&s, "layout(std430, set = %d, binding = 30) buffer XfbS { uint w[]; } xfbs_;\n", set);
+                    sp(&s, "void xfb_store(uint64_t a, uint v) { xfbs_.w[uint(a >> 2)] = v; }\n");
+                } else if (getenv("PVR_XFB_NOSTORE")) {  // (PVRecomp, measurement only: breaks the image) the VS math without the stores
+                    sp(&s, "void xfb_store(uint64_t a, uint v) { if (v == 0x7fc12345u && a == 1ul) gmem0_.w[0] = v; }\n");
+                } else {
                 sp(&s, "void xfb_store(uint64_t a, uint v) { uint64_t ga; uint gwi = g_win(a, ga); uint wi = uint(ga >> 2); switch (gwi) {");
                 for (int k = 0; k < GMEM_WINDOWS; k++) sp(&s, " case %du: gmem%d_.w[wi] = v; break;", k, k);
                 sp(&s, " default: break; } }\n");
+                }
             }
         }
     if (c->uses_rscale && stage != STAGE_VERTEX) {

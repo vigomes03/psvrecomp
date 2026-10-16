@@ -50,6 +50,9 @@ python tools/verify/gates.py run host --version v400
 | `PVR_CPUPROF=<de_s>:<até_s>` | amostra a CPU das threads do jogo (~1 ms) e grava `build/cpuprof.txt`; relatório: `tools/rea/cpuprof_report.py build/cpuprof.txt pvgame.dll pvhost.exe` |
 | `LARECOMP_VK_PROF=1` | tempo do render thread por categoria, GPU ocupada e esperas na GPU por local (`waits by site`, RVA para `addr2line`) |
 | `PVR_FRAMEPACE=0` / `PVR_FPS_CAP=<fps>` | desliga o limitador de apresentação (o jogo acelera em cenas leves) / usa outra taxa no lugar de 60/intervalo (o Violet pede intervalo 2 = 30 fps) |
+| `PVR_XFB_SCRATCH=0` / `PVR_XFB_OWN_PASS=0` | A/B: transform feedback (personagens) volta a escrever direto na memória do guest / no passe normal |
+| `PVR_SUBMIT=list` | A/B: uma submissão por lista de comandos (o padrão segue o NVN: envia no Flush/Finish/present) |
+| `PVR_XFB_NOSTORE=1` | (medição, quebra a imagem) shaders de xfb sem as escritas |
 | `PVR_SUBS=<1..64>` | quantas submissões em voo o backend usa (padrão 64; o LAS usava 8) — A/B de desempenho |
 
 Detalhe de uso e armadilhas: skill `switch-static-recompilation` (referência `vulkan-backend.md`).

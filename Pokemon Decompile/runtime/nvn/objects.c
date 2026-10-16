@@ -117,7 +117,8 @@ NVN(nvnQueueSubmitCommands) {
     const uint64_t *handles = AP(2);
     for (int i = 0; i < n; i++) backend_execute(handles[i]);
 }
-NVN(nvnQueueFlush) { (void)c; }
+void backend_queue_flush(void);  // (PVRecomp) the queued command lists go to the GPU here (exec.c backend_execute)
+NVN(nvnQueueFlush) { (void)c; backend_queue_flush(); }
 NVN(nvnQueueFinish) { (void)c; renderer_sync(); }
 
 static NvnSync *sync_of(uint64_t guest) {

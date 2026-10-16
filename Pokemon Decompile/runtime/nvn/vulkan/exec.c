@@ -689,6 +689,8 @@ static VkFormat pass_color[8], pass_depth, pass_stencil;
 static uint32_t pass_ncolor, pass_samples = 1, pass_w, pass_h;
 static int debug_pass_no;
 
+static bool in_xfb_pass, want_xfb_pass;  // (PVRecomp) shared attachment-less pass for transform feedback (begin_pass)
+static void xs_flush(VkCommandBuffer cb);
 static void vk_end_pass_at(int line);
 void vk_end_pass(void) { vk_end_pass_at(0); }
 #define vk_end_pass() vk_end_pass_at(__LINE__)
@@ -697,6 +699,7 @@ static void vk_end_pass_at(int line) {
     if (prof && line < 4096) prof_end_line[line]++;
     vkCmdEndRendering(vk_cmd());
     in_pass = false;
+    if (in_xfb_pass) { in_xfb_pass = false; xs_flush(vk_cmd()); }  // captured vertices -> guest memory
     if (g_debug_frame && st.rt.ncolor && st.rt.color[0] && st.rt.color[0]->backend) {
         char path[256];
         static uint64_t debug_pass_frame = ~0ull;
@@ -718,8 +721,14 @@ static void vk_end_pass_at(int line) {
 
 static uint32_t level_extent(uint32_t v, uint32_t lv) { v >>= lv; return v ? v : 1; }
 
+// (PVRecomp) Transform-feedback draws (Violet skins its characters with ~96 of them per battle frame) have no fragment
+// shader and only write vertices to memory. They used to run in the normal pass (8 x 1080p G-buffer targets,
+// load/store, a full barrier at begin) and end it after every draw: ~0.9 ms fixed cost each, ~22 of ~33 ms of GPU per
+// frame. Now consecutive xfb draws share one pass WITHOUT attachments; the next normal pass / dispatch / copy begins
+// with vk_full_barrier as always, so their output is visible to the consumers. PVR_XFB_OWN_PASS=0: old behaviour.
 static void begin_pass(void) {
-    if (in_pass && !st.rt_dirty) return;
+    // (an xfb pass has no attachments: render-target changes between xfb draws don't end it)
+    if (in_pass && in_xfb_pass == want_xfb_pass && (want_xfb_pass || !st.rt_dirty)) return;
     vk_end_pass();
     if (dl_on == 2) renderer_flush();  // (LARECOMP_VK_DEVLOST_TRACE=2: each pass its own submission)
     st.rt_dirty = false;
@@ -732,15 +741,15 @@ static void begin_pass(void) {
     }
     if (g_gpuprof_frame) {
         NvnTexture *t0 = st.rt.ncolor ? st.rt.color[0] : NULL;
-        gp_mark(cb, "pass: %d color %ux%u fmt %#x, depth %s", st.rt.ncolor, t0 ? t0->width : 0, t0 ? t0->height : 0,
-                t0 ? t0->format : 0, st.rt.depth ? "yes" : "no");
+        gp_mark(cb, "pass%s: %d color %ux%u fmt %#x, depth %s", want_xfb_pass ? " (xfb, no attachments)" : "", st.rt.ncolor,
+                t0 ? t0->width : 0, t0 ? t0->height : 0, t0 ? t0->format : 0, st.rt.depth ? "yes" : "no");
     }
     VkRenderingAttachmentInfo ca[8], da = {0}, sa = {0};
     uint32_t w = 0, minw = UINT32_MAX, minh = UINT32_MAX;  // w: first attachment seen
     uint32_t pass_layers = 1;
-    pass_ncolor = (uint32_t)st.rt.ncolor;
+    pass_ncolor = want_xfb_pass ? 0 : (uint32_t)st.rt.ncolor;  // (xfb pass: no attachments, their state untouched)
     pass_samples = 1;
-    for (int i = 0; i < st.rt.ncolor; i++) {
+    for (int i = 0; i < (int)pass_ncolor; i++) {
         NvnTexture *t = st.rt.color[i];
         ca[i] = (VkRenderingAttachmentInfo){.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
         pass_color[i] = VK_FORMAT_UNDEFINED;
@@ -778,7 +787,7 @@ static void begin_pass(void) {
     }
     pass_depth = pass_stencil = VK_FORMAT_UNDEFINED;
     bool has_d = false, has_s = false;
-    if (st.rt.depth) {
+    if (st.rt.depth && !want_xfb_pass) {
         renderer_mark_gpu_owned(st.rt.depth);
         VkImageView v = vk_view(st.rt.depth, &st.rt.dview, st.rt.has_dview, true, TEXTYPE_2D);
         TexBackend *b = st.rt.depth->backend;
@@ -803,6 +812,7 @@ static void begin_pass(void) {
                           .pDepthAttachment = has_d ? &da : NULL, .pStencilAttachment = has_s ? &sa : NULL};
     vkCmdBeginRendering(cb, &ri);
     in_pass = true;
+    in_xfb_pass = want_xfb_pass;
     vp_sx = pass_sx; vp_sy = pass_sy; vp_ox = 0; vp_oy = 0;
     stat_passes++;
 }
@@ -951,6 +961,7 @@ static VkPipeline clear_pipeline(int index, int kind, uint32_t mask, bool depth,
 
 static void clear(int index, int kind, const void *color, uint32_t mask, bool depth, float dval, bool stencil, uint32_t sval,
                   uint32_t smask) {
+    want_xfb_pass = false;  // (a clear needs the real attachments, whatever the last draw was)
     begin_pass();
     VkCommandBuffer cb = vk_cmd();
     vp_sx = pass_sx; vp_sy = pass_sy; vp_ox = 0; vp_oy = 0;
@@ -1766,6 +1777,68 @@ static bool guest_direct(uint64_t addr, uint64_t size, VkBuffer *buf, VkDeviceSi
     return true;
 }
 
+// (PVRecomp) Transform-feedback scratch. Vertex shaders that store captured vertices straight into guest memory write
+// 4 bytes at a time over PCIe into the imported host pages: ~17 of ~29 ms of GPU per battle frame (PVR_XFB_NOSTORE
+// measurement: 0.14 ms without the stores). In the shared xfb pass they write to this device-local buffer instead,
+// one region per bound guest buffer, and xs_flush copies each region's written bytes to the guest when the pass ends
+// (before the next pass / dispatch / copy, which all begin with a full barrier). PVR_XFB_SCRATCH=0: direct stores.
+#define XS_SIZE (64ull << 20)
+static VkBuffer xs_buf;
+static VmaAllocation xs_mem;
+#define XS_REGS 1024  // (each xfb draw captures into ~3 guest buffers; ~96 draws per battle frame)
+static struct { uint64_t gaddr, soff, size, written; } xs_reg[XS_REGS];
+static int xs_n;
+static uint64_t xs_top;
+static bool xs_ready(void) {
+    static int on = -1;
+    if (on < 0) on = !getenv("PVR_XFB_SCRATCH") || atoi(getenv("PVR_XFB_SCRATCH")) != 0;
+    if (!on) return false;
+    if (!xs_buf) {
+        VkBufferCreateInfo bi = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = XS_SIZE,
+                                 .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT};
+        VmaAllocationCreateInfo ai = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+        if (vmaCreateBuffer(g_vk.vma, &bi, &ai, &xs_buf, &xs_mem, NULL) != VK_SUCCESS) { xs_buf = VK_NULL_HANDLE; on = 0; return false; }
+        LOG("[xfb] device-local scratch %llu MB\n", (unsigned long long)(XS_SIZE >> 20));
+    }
+    return true;
+}
+static int xs_find(uint64_t gaddr, uint64_t size) {
+    for (int i = 0; i < xs_n; i++) if (xs_reg[i].gaddr == gaddr && xs_reg[i].size >= size) return i;
+    return -1;
+}
+// region of guest buffer [gaddr, gaddr+size) in the scratch (-1: no room / no destination buffer to copy into).
+// Called after begin_pass (an ending xfb pass empties the table); xfb_try_scratch checked the room beforehand.
+static int xs_region(uint64_t gaddr, uint64_t size) {
+    int i = xs_find(gaddr, size);
+    if (i >= 0) return i;
+    VkBuffer d; VkDeviceSize o;
+    if (xs_n == XS_REGS || xs_top + size > XS_SIZE || !guest_direct(gaddr, size, &d, &o)) return -1;
+    xs_reg[xs_n] = (typeof(xs_reg[0])){gaddr, xs_top, size, 0};
+    xs_top = (xs_top + size + 255) & ~255ull;
+    return xs_n++;
+}
+static void xs_flush(VkCommandBuffer cb) {
+    if (!xs_n) return;
+    VkMemoryBarrier mb = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+                          .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT};
+    vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &mb, 0, NULL, 0, NULL);
+    static VkBufferCopy cp[XS_REGS];  // consecutive regions with the same destination buffer: one vkCmdCopyBuffer
+    VkBuffer cur = VK_NULL_HANDLE;
+    uint32_t ncp = 0;
+    for (int i = 0; i < xs_n; i++) {
+        uint64_t n = xs_reg[i].written < xs_reg[i].size ? xs_reg[i].written : xs_reg[i].size;
+        VkBuffer d; VkDeviceSize o;
+        if (!n || !guest_direct(xs_reg[i].gaddr, n, &d, &o)) continue;
+        if (d != cur && ncp) { vkCmdCopyBuffer(cb, xs_buf, cur, ncp, cp); ncp = 0; }
+        cur = d;
+        cp[ncp++] = (VkBufferCopy){xs_reg[i].soff, o, n};
+    }
+    if (ncp) vkCmdCopyBuffer(cb, xs_buf, cur, ncp, cp);
+    vk_full_barrier(cb);  // the copies before anything that reads the vertices
+    xs_n = 0;
+    xs_top = 0;
+}
+
 static int g_cs_n;  // (compute program table below)
 
 // In-place reboot (device.c backend_reset; GPU idle): drop what is keyed by guest addresses - programs by code
@@ -1930,6 +2003,9 @@ static VkDescriptorSet stage_set(Prog *p, VkDescriptorSetLayout layout, uint32_t
             w[n].pImageInfo = &ii[n];
         } else if (b->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER && b->binding < 17) {
             bi[n] = cbuf_info(stage, si, (int)b->binding, gx, gy, gz);
+            w[n].pBufferInfo = &bi[n];
+        } else if (b->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER && b->binding == 30) {  // xfb scratch (PVRecomp)
+            bi[n] = (VkDescriptorBufferInfo){xs_buf, 0, XS_SIZE};
             w[n].pBufferInfo = &bi[n];
         } else if (b->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER) {
             bi[n] = gwin_info(b->binding == GMEM_BUFFER_INDEX ? 0 : (int)b->binding - 20);
@@ -2100,6 +2176,39 @@ static void draw_(CmdRec *r, bool indexed) {
     for (int i = 0; i < st.nattrib; i++) vkey.attr_kind[i] = (uint8_t)attr_kind(st.attrib[i] & 0xFF);
     for (int i = 0; i < st.rt.ncolor; i++) if (st.rt.color[i]) fkey.rt_kind[i] = (uint8_t)rt_kind(st.rt.color[i]->format);
     bool xfb_on = xfb_key(&vkey);
+    int xs_idx[4] = {-1, -1, -1, -1};
+    {   // shared xfb pass + device-local scratch: only buffers fully covered by the captured components (no holes)
+        static int own = -1;
+        if (own < 0) own = !getenv("PVR_XFB_OWN_PASS") || atoi(getenv("PVR_XFB_OWN_PASS")) != 0;
+        bool shared = own && xfb_on && !st.program->stages[1].code_addr;
+        if (shared && xs_ready()) {  // room check only: the regions are taken after begin_pass
+            bool ok = true;
+            uint64_t need = 0;
+            int newk = 0;
+            for (int b = 0; b < 4 && ok; b++) {
+                if (!vkey.xfb_ncomp[b]) continue;
+                VkBuffer d; VkDeviceSize o;
+                if (vkey.xfb_stride[b] != 4u * vkey.xfb_ncomp[b] || !guest_direct(xfb.addr[b], xfb.size[b], &d, &o)) ok = false;
+                else if (xs_find(xfb.addr[b], xfb.size[b]) < 0) { need += (xfb.size[b] + 255) & ~255ull; newk++; }
+            }
+            vkey.xfb_scratch = ok && xs_top + need <= XS_SIZE && xs_n + newk <= XS_REGS;
+            static uint64_t n_xs, n_direct;
+            if (vkey.xfb_scratch) n_xs++;
+            else {
+                n_direct++;
+                static int nl;
+                if (nl++ < 6)
+                    for (int b = 0; b < 4; b++)
+                        if (vkey.xfb_ncomp[b]) {
+                            VkBuffer d; VkDeviceSize o;
+                            LOG("[xfb] direct: b%d ncomp %u stride %u addr %llx size %llu guest_direct %d | top %llu need %llu n %d\n", b,
+                                vkey.xfb_ncomp[b], vkey.xfb_stride[b], (unsigned long long)xfb.addr[b], (unsigned long long)xfb.size[b],
+                                guest_direct(xfb.addr[b], xfb.size[b], &d, &o), (unsigned long long)xs_top, (unsigned long long)need, xs_n);
+                        }
+            }
+            if ((n_xs + n_direct) % 200000 == 0) LOG("[xfb] scratch draws %llu, direct %llu\n", (unsigned long long)n_xs, (unsigned long long)n_direct);
+        }
+    }
     Prog *pr = get_program(st.program, &vkey, &fkey);
     if (pr && atomic_load(&pr->state) == 1 && pr->fi && pr->fi->ntex) {  // (PVRecomp) stencil-mode textures: integer variant
         extern bool vk_view_is_stencil(const NvnTexture *t, const NvnTextureView *v);
@@ -2194,8 +2303,16 @@ static void draw_(CmdRec *r, bool indexed) {
     snap_reason = "draw-colorwrite";
     for (int i = 0; i < st.rt.ncolor; i++)
         if (st.rt.color[i] && ((st.channel_mask >> (i * 4)) & 0xF)) snapshots_invalidate(st.rt.color[i]);
+    {
+        static int own = -1;
+        if (own < 0) own = !getenv("PVR_XFB_OWN_PASS") || atoi(getenv("PVR_XFB_OWN_PASS")) != 0;
+        want_xfb_pass = own && xfb_on && !st.program->stages[1].code_addr;  // vertex-only capture: no attachments
+    }
     begin_pass();
     VkCommandBuffer cb = vk_cmd();
+    if (vkey.xfb_scratch)
+        for (int b = 0; b < 4; b++)
+            if (vkey.xfb_ncomp[b] && (xs_idx[b] = xs_region(xfb.addr[b], xfb.size[b])) < 0) SKIP(7);  // (can't: room checked)
 
     uint32_t mode = (uint32_t)r->x[0];
     VkPrimitiveTopology topo;
@@ -2389,7 +2506,8 @@ static void draw_(CmdRec *r, bool indexed) {
     if (xfb_on) {
         uint32_t first0 = indexed ? (uint32_t)r->x[4] : (uint32_t)r->x[1];  // (gl_VertexIndex of the first vertex)
         for (int b = 0; b < 4; b++) {
-            g_xfb_ubo[b][0] = (uint32_t)xfb.addr[b]; g_xfb_ubo[b][1] = (uint32_t)(xfb.addr[b] >> 32);
+            uint64_t base = vkey.xfb_scratch && xs_idx[b] >= 0 ? xs_reg[xs_idx[b]].soff : xfb.addr[b];  // scratch: byte offset
+            g_xfb_ubo[b][0] = (uint32_t)base; g_xfb_ubo[b][1] = (uint32_t)(base >> 32);
             g_xfb_ubo[b][2] = (uint32_t)xfb.off[b]; g_xfb_ubo[b][3] = first0;
         }
     }
@@ -2585,7 +2703,15 @@ static void draw_(CmdRec *r, bool indexed) {
     stat_draws++;
     cum_draws++;
     if (xfb_on) {  // captured vertices: advance the offsets; make the writes visible to the next draws' vertex fetch
-        for (int b = 0; b < 4; b++) xfb.off[b] += (uint64_t)count * inst * vkey.xfb_stride[b];
+        for (int b = 0; b < 4; b++) {
+            xfb.off[b] += (uint64_t)count * inst * vkey.xfb_stride[b];
+            // (only outputs the shader writes reach the scratch: copy just those back)
+            if (vkey.xfb_scratch && xs_idx[b] >= 0 && pr->vi && (pr->vi->out_mask >> vkey.xfb_out[b] & 1) &&
+                xfb.off[b] > xs_reg[xs_idx[b]].written)
+                xs_reg[xs_idx[b]].written = xfb.off[b];
+        }
+    }
+    if (xfb_on && !in_xfb_pass) {  // (in the shared xfb pass: the barrier comes with whatever begins next)
         vk_end_pass();
         VkMemoryBarrier mb = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER, .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
                               .dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_INDEX_READ_BIT |
@@ -2611,7 +2737,8 @@ static void draw_(CmdRec *r, bool indexed) {
     if (g_gpuprof_frame && gp_n) {
         if (!gp_draws[gp_n - 1]) {  // first draw of the row: its fragment shader hash
             size_t l = strlen(gp_label[gp_n - 1]);
-            snprintf(gp_label[gp_n - 1] + l, sizeof gp_label[0] - l, ", first fs %016llx", (unsigned long long)g_cur_fs_hash);
+            snprintf(gp_label[gp_n - 1] + l, sizeof gp_label[0] - l, ", first fs %016llx%s %ux%u verts", (unsigned long long)g_cur_fs_hash,
+                     xfb_on ? " XFB" : "", count, inst);
         }
         gp_draws[gp_n - 1]++;
     }
@@ -3480,8 +3607,15 @@ void backend_execute(uint64_t handle) {
     exec_list(handle, 0);
     PROF_ADD(prof_exec);
     if (prof) cum_exec += SDL_GetTicksNS() - prof_t0_;
-    static int sync_submit = -1;
+    static int sync_submit = -1, per_list = -1;
     if (sync_submit < 0) sync_submit = getenv("LARECOMP_SYNC_SUBMIT") ? 1 : 0;
+    // (PVRecomp) NVN semantics: SubmitCommands only queues, nvnQueueFlush / Finish / present send the work to the GPU
+    // (backend_queue_flush). LAS submitted every list: Violet sends ~96 per frame and the GPU idled ~0.15 ms at each
+    // submission boundary. PVR_SUBMIT=list: the old behaviour. A batch is still cut after 64 lists (descriptor pools).
+    if (per_list < 0) per_list = getenv("PVR_SUBMIT") && !strcmp(getenv("PVR_SUBMIT"), "list");
+    static int queued;
     if (sync_submit) renderer_flush();
-    else renderer_submit();
+    else if (per_list || ++queued >= 64) { renderer_submit(); queued = 0; }
 }
+
+void backend_queue_flush(void) { renderer_submit(); }  // nvnQueueFlush (objects.c)

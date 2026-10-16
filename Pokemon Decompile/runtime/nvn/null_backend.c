@@ -14,6 +14,8 @@ void backend_execute(uint64_t handle) {
     atomic_fetch_add(&execute_count, 1);
 }
 
+void backend_queue_flush(void) {}
+
 void backend_present(NvnTexture *tex) {
     uint64_t current_frame = atomic_fetch_add(&frame_count, 1) + 1;
     
