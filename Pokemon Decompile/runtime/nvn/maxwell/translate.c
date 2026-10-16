@@ -716,7 +716,10 @@ static bool glsl_texs(Ctx *c, uint64_t w, bool fetch, int *slot_out, char *call,
         case 7: slot = tex_slot(c, index, TEXTYPE_3D, false, false);
             sprintf(call, "texelFetch(t%d, ivec3(%s, %s, %s), 0)", slot, A, A1, Bv); break;
         case 8: slot = tex_slot(c, index, TEXTYPE_2D_ARRAY, false, true);
-            sprintf(call, "texelFetch(t%d, ivec3(ivec2(%s), int(%s)), 0)", slot, RSC2(c, slot, "uint2(%s, %s)", A1, Bv), A); break;
+            // (PVRecomp) TLDS 2D array: coords (Rb, Rb+1), layer Ra[15:0] (yuzu/eden texture_load_swizzled.cpp case 8). It
+            // used TEXS's array layout (Ra+1, Rb): x/y transposed. Violet's terrain material map is read that way, so the
+            // ground took the material of the mirrored spot (beach sand instead of grass on Poco Path, 16/10).
+            sprintf(call, "texelFetch(t%d, ivec3(ivec2(%s), int((%s) & 0xFFFFu)), 0)", slot, RSC2(c, slot, "uint2(%s, %s)", Bv, B1), A); break;
         case 12: slot = tex_slot(c, index, TEXTYPE_2D, false, false);
             sprintf(call, "texelFetch(t%d, ivec2(%s), int(%s))", slot, RSC2(c, slot, "uint2(int2(%s, %s) + int2(int(%s << 28) >> 28, int(%s << 24) >> 28))", A, A1, B1, B1), Bv); break;
         default: fail(c, "tlds info %d", info); return false;
@@ -797,7 +800,7 @@ static void emit_texs(Ctx *c, uint64_t w, bool fetch) {
         case 7: slot = tex_slot(c, index, TEXTYPE_3D, false, false);
             sprintf(call, "t%d.read(uint3(%s, %s, %s))", slot, A, A1, Bv); break;
         case 8: slot = tex_slot(c, index, TEXTYPE_2D_ARRAY, false, true);
-            sprintf(call, "t%d.read(%s, uint(%s))", slot, RSC2(c, slot, "uint2(%s, %s)", A1, Bv), A); break;
+            sprintf(call, "t%d.read(%s, uint((%s) & 0xFFFFu))", slot, RSC2(c, slot, "uint2(%s, %s)", Bv, B1), A); break;  // (see glsl_texs)
         case 12: slot = tex_slot(c, index, TEXTYPE_2D, false, false);
             sprintf(call, "t%d.read(%s, uint(%s))", slot, RSC2(c, slot, "uint2(int2(%s, %s) + int2(int(%s << 28) >> 28, int(%s << 24) >> 28))", A, A1, B1, B1), Bv); break;
         default: fail(c, "tlds info %d", info); return;

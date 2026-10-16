@@ -61,7 +61,9 @@ Ordem de trabalho (atualizada no fim de 15/10; 🟢 = provado por run_auto/teste
    7. **Memória:** dados que a GPU lê (vértices, constantes) moram na RAM e são lidos via PCIe; cópias em VRAM
       dos mais usados.
 4. 🟢 **Log e aviso de crash (7.x):** caixa de erro com a causa + cópia do log em `crashes/` + `tools/rea/crash_report.py` (16/10; falta o [USER] ver a caixa na janela).
-5. **Visual:** 🟢 céu com faixa corrigido 16/10 (LUT 3D de atmosfera com block depth errado: layout empacotado 3D ignorado em nvn/objects.c; o céu ficou azul-claro como no jogo). Falta: artefatos de iluminação, objetos sem render — o [USER] indica o lugar e cria saves.
+5. **Visual:** 🟢 céu com faixa corrigido 16/10 (LUT 3D de atmosfera com block depth errado: layout empacotado 3D ignorado em nvn/objects.c; o céu ficou azul-claro como no jogo). 🟢 chão de areia no lugar da grama corrigido 16/10 (TLDS de array 2D com coordenadas transpostas no tradutor: o
+   terreno lia o mapa de materiais no ponto espelhado); draws indiretos passaram a ser executados. Falta: árvores no
+   Poco Path (conferir após a correção), artefatos de iluminação — o [USER] indica o lugar e cria saves.
 6. 🟢 **Áudio (5.1):** corrigido 16/10 (o build de janela usava o dispositivo de áudio falso do headless); o jogo toca pelo audout. **Confirmado pelo [USER]** (ouviu na janela, 16/10).
 7. 🟢 **Teclado do nome (5.6, swkbd):** caixa de texto na frente do jogo, no monitor do jogo + resposta em UTF-16 (o Violet não usa UTF-8). **Confirmado pelo [USER]:** digitou "Lokiju" e a ficha mostra o nome e a foto (16/10).
 8. ✅ **Gate `window`:** `gates.py run window` (jogo novo, 30 fps, sem crash, telas renderizadas, cena avança) — run_id=312d34de1a.
