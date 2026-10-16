@@ -45,8 +45,9 @@ Ordem de trabalho (atualizada no fim de 15/10; 🟢 = provado por run_auto/teste
      Falta: opção no menu/`psvrecomp.ini`, teste longo de sincronia (animações, cutscenes).
    - **Regra de teste ([USER], 15/10): daqui em diante tudo é testado a 30 fps** (limitador ligado, sem
      `PVR_FRAMEPACE=0` / `PVR_GAME60`), salvo medição de folga pedida explicitamente.
-3. 🧠 **Fluidez / consistência (6.8, próxima fase de desempenho)** — o [USER] ainda sente engasgos e frame times
-   irregulares. Em ordem:
+3. 🟢 **Fluidez / consistência (6.8)** — medição feita (commit 912c97b): a 30 fps os picos só aparecem no carregamento
+   e na compilação de shaders ao entrar em cenas novas; o [USER] considera os 30 fps ok (15/10). Os itens abaixo ficam
+   em espera, retomados se os engasgos voltarem a incomodar ou para preparar 60 fps / fidelidade:
    1. **Medição** por frame: tempo de cada frame, 1% low, quantos picos e a causa de cada um (compilação de shader,
       upload de textura, espera de GPU, jogo). Sem isso qualquer correção é chute.
    2. **Compilação de shader durante o jogo:** `compiles N pending` e draws pulados em áreas novas → pré-compilar
