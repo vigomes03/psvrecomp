@@ -328,6 +328,15 @@ static void builder_layout(uint64_t b, TexLayout *t) {
     // from the driver default: NVNpackagedTextureLayout's low word is log2(GOBs per block).
     uint64_t pl = G(uint64_t, b, 0x50);
     if (pl && (uint32_t)pl <= 5) t->block_height_log2 = (uint32_t)pl;
+    else if (pl && t->depth > 1) {
+        // (PVRecomp) 3D: the same low word packs log2(GOBs per block) in height (bits 0-3) AND in depth (bits 4-7) --
+        // the sky scattering LUT (32x128x32, fmt 0x29) has 0x40 = bh 0, bd 4. The old code dropped it and kept the
+        // defaults (bh 4, bd 5), mixing the table's slices: a dark band across the sky (16/10). Checked by decoding a
+        // slice: bits 0-3/4-7 give a smooth table; the nouveau order (bits 4-7/8-11) repeats every 8 rows.
+        uint32_t lo = (uint32_t)pl;
+        t->block_height_log2 = lo & 0xF;
+        t->block_depth_log2 = (lo >> 4) & 0xF;
+    }
     if (pl && getenv("LARECOMP_LOG_PACKAGED")) {
         static int n;
         if (n++ < 4000) LOG("[nvn] packaged layout %016llx fmt %#x %ux%u lv %u -> default bh %u\n", pl, G(uint32_t, b, 0x20), t->width, t->height, t->levels, t->block_height_log2);
