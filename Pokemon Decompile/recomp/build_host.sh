@@ -13,7 +13,7 @@ mkdir -p "$OUT/rt"
 FLAGS="-O2 -g -fno-strict-aliasing -Wall -Wno-unused-function -D_FILE_OFFSET_BITS=64 -D_POSIX_THREAD_SAFE_FUNCTIONS -D_CRT_RAND_S -DWIN32_LEAN_AND_MEAN -DNOMINMAX -march=x86-64-v3"
 NVN_CORE=("$P"/nvn/cmdbuf.c "$P"/nvn/formats.c "$P"/nvn/objects.c "$P"/nvn/tegra.c "$P"/nvn/xfb_layout.c)
 INC=()
-LIBS="-lwinmm -lole32 -lshell32 -ldbghelp -lbcrypt"
+LIBS="-lwinmm -lole32 -lshell32 -ldbghelp -lbcrypt -lgdi32"  # (gdi32: swkbd text box font)
 case $BACKEND in
   null)   NVN=("${NVN_CORE[@]}" "$P"/nvn/null_backend.c) ;;
   vulkan) NVN=("${NVN_CORE[@]}" "$P"/nvn/astc.c "$P"/nvn/output_scale.c "$P"/nvn/smaa_data.c

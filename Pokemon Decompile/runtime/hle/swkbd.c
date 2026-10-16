@@ -27,10 +27,34 @@ HLE_FUNC("_ZN2nn5swkbd12ShowKeyboardEPNS0_6StringERKNS0_15ShowKeyboardArgE", swk
     char text[96];
     int ok = menu_keyboard_run(initial, max_len, text, sizeof text);
     if (!ok) snprintf(text, sizeof text, "%s", initial);  // cancelled: keep what was there
-    LOG("[swkbd] name entry (max %d, initial \"%s\"): %s \"%s\"\n", max_len, initial, ok ? "entered" : "cancelled", text);
+    // (PVRecomp) KeyboardConfig: ... textMaxLength +0x3ac, textMinLength +0x3b0, passwordMode +0x3b4, inputFormMode
+    // +0x3b8, isUseNewLine +0x3bc, isUseUtf8 +0x3bd, isUseBlurBackground +0x3be, initial string +0x3c0. Zelda sets
+    // isUseUtf8; Violet does not and reads the answer as UTF-16: the UTF-8 bytes of "[USER]" showed up as "?瑱?".
+    int utf8 = *(const uint8_t *)(uintptr_t)(arg + 0x3bd);
+    {   // (check of the layout above: the bytes the game passed)
+        const uint8_t *k = (const uint8_t *)(uintptr_t)(arg + 0x3a8);
+        LOG("[swkbd] arg+0x3a8:");
+        for (int i = 0; i < 0x20; i++) LOG(" %02x", k[i]);
+        LOG("\n");
+    }
+    LOG("[swkbd] name entry (max %d, initial \"%s\", %s): %s \"%s\"\n", max_len, initial, utf8 ? "utf-8" : "utf-16",
+        ok ? "entered" : "cancelled", text);
     if (ptr && size) {
         memset((void *)(uintptr_t)ptr, 0, size);
-        snprintf((char *)(uintptr_t)ptr, size, "%s", text);
+        if (utf8) {
+            snprintf((char *)(uintptr_t)ptr, size, "%s", text);
+        } else {  // UTF-8 -> UTF-16LE (BMP), NUL-terminated, at most max_len characters
+            uint16_t *o = (uint16_t *)(uintptr_t)ptr;
+            size_t cap = size / 2, k = 0;
+            for (const unsigned char *q = (const unsigned char *)text; *q && k + 1 < cap && (max_len <= 0 || (int)k < max_len);) {
+                uint32_t cp = *q++;
+                if (cp >= 0xE0 && q[0] && q[1]) { cp = ((cp & 0x0F) << 12) | ((q[0] & 0x3F) << 6) | (q[1] & 0x3F); q += 2; }
+                else if (cp >= 0xC0 && q[0]) { cp = ((cp & 0x1F) << 6) | (q[0] & 0x3F); q += 1; }
+                else if (cp >= 0x80) cp = '?';
+                o[k++] = (uint16_t)cp;
+            }
+            o[k] = 0;
+        }
     }
     c->x[0] = 0;
 }

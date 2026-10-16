@@ -209,6 +209,64 @@ void plat_fatal_notice(void) {
     MessageBoxA(NULL, text, "PSV Recomp", MB_ICONERROR | MB_OK | MB_TOPMOST | MB_SETFOREGROUND);
 }
 
+// (PVRecomp) Text prompt for the software keyboard (hle/swkbd.c via menu_keyboard_run): a small topmost window with an
+// edit box, OK / Cancel, on the calling (game) thread with its own message loop. Returns 1 = OK (UTF-8 in out).
+static HWND g_tp_edit;
+static int g_tp_result;
+static LRESULT CALLBACK tp_proc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
+    switch (m) {
+    case WM_COMMAND:
+        if (LOWORD(wp) == IDOK || LOWORD(wp) == IDCANCEL) { g_tp_result = LOWORD(wp) == IDOK; DestroyWindow(h); }
+        return 0;
+    case WM_CLOSE: g_tp_result = 0; DestroyWindow(h); return 0;
+    case WM_DESTROY: PostQuitMessage(0); return 0;
+    }
+    return DefWindowProcW(h, m, wp, lp);
+}
+int plat_text_prompt(const char *title, const char *initial, int max_len, char *out, int cap) {
+    static ATOM cls;
+    HINSTANCE hi = GetModuleHandleW(NULL);
+    if (!cls) {
+        WNDCLASSW wc = {.lpfnWndProc = tp_proc, .hInstance = hi, .lpszClassName = L"PsvTextPrompt",
+                        .hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1), .hCursor = LoadCursor(NULL, IDC_ARROW)};
+        cls = RegisterClassW(&wc);
+    }
+    wchar_t wt[128], wi[128];
+    MultiByteToWideChar(CP_UTF8, 0, title, -1, wt, 128);
+    MultiByteToWideChar(CP_UTF8, 0, initial ? initial : "", -1, wi, 128);
+    int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN), ww = 420, wh = 150;
+    HWND h = CreateWindowExW(WS_EX_TOPMOST | WS_EX_DLGMODALFRAME, L"PsvTextPrompt", wt, WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
+                             (sw - ww) / 2, (sh - wh) / 2, ww, wh, NULL, NULL, hi, NULL);
+    if (!h) return 0;
+    HFONT f = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+    g_tp_edit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", wi, WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL, 15, 15, 375,
+                                26, h, (HMENU)100, hi, NULL);
+    HWND ok = CreateWindowExW(0, L"BUTTON", L"OK", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON, 215, 60, 85, 28, h,
+                              (HMENU)IDOK, hi, NULL);
+    HWND ca = CreateWindowExW(0, L"BUTTON", L"Cancel", WS_CHILD | WS_VISIBLE | WS_TABSTOP, 305, 60, 85, 28, h, (HMENU)IDCANCEL,
+                              hi, NULL);
+    SendMessageW(g_tp_edit, WM_SETFONT, (WPARAM)f, TRUE);
+    SendMessageW(ok, WM_SETFONT, (WPARAM)f, TRUE);
+    SendMessageW(ca, WM_SETFONT, (WPARAM)f, TRUE);
+    if (max_len > 0) SendMessageW(g_tp_edit, EM_LIMITTEXT, (WPARAM)max_len, 0);
+    SendMessageW(g_tp_edit, EM_SETSEL, 0, -1);
+    SetForegroundWindow(h);
+    SetFocus(g_tp_edit);
+    g_tp_result = 0;
+    wchar_t got[128] = L"";
+    MSG msg;
+    while (GetMessageW(&msg, NULL, 0, 0) > 0) {
+        if (msg.message == WM_KEYDOWN && msg.wParam == VK_RETURN) { GetWindowTextW(g_tp_edit, got, 128); g_tp_result = 1; DestroyWindow(h); continue; }
+        if (msg.message == WM_KEYDOWN && msg.wParam == VK_ESCAPE) { g_tp_result = 0; DestroyWindow(h); continue; }
+        if (IsWindow(g_tp_edit)) GetWindowTextW(g_tp_edit, got, 128);  // (before an OK click destroys the box)
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+    if (!g_tp_result) return 0;
+    WideCharToMultiByte(CP_UTF8, 0, got, -1, out, cap, NULL, NULL);
+    return 1;
+}
+
 void plat_init(void) {
     log_to_file_without_console();
     require_cpu();
