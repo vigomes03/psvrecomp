@@ -46,6 +46,15 @@ Ordem de trabalho:
 6. **Teclado do nome (5.6, swkbd):** hoje o jogo usa um nome padrão (`?瑱?` na ficha).
 7. **Gate `window`:** screenshot automático no frame N para formalizar M3-M5.
 
+## Problemas conhecidos (para caçar depois)
+
+- **Crash raro no carregamento da 1ª batalha** (~1 em 9 execuções do save `user_antes_batalha_20261015`, sem
+  limitador): `exception c0000005` em funções do jogo, p.ex. `f_7000c1e658 <- f_7000c1e5f8 <- f_7000e02cac` (busca
+  de componente com hash `0x3d3f8b275e8b9993` que volta nulo e o chamador não checa) e outro acessando `0x1e8`; uma
+  vez precedido de `OODLE ERROR: LZ corruption`. Hipótese: race de carregamento que o nosso timing expõe (no Switch
+  o objeto já estaria pronto). Logs: `lab/host-vk/stb3_3.run1.log`, `xs3.run1.log`, `stab_7.run1.log`,
+  `stab_8.run1.log`. Adiado por decisão do [USER] (15/10).
+
 ## Marcos
 
 | Marco | Critério objetivo |
