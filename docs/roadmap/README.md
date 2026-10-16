@@ -60,7 +60,7 @@ Ordem de trabalho (atualizada no fim de 15/10; 🟢 = provado por run_auto/teste
    6. **Código recompilado:** ~7 % ainda no caminho lento de FP; FN_ENTER em toda função; dispatch indireto.
    7. **Memória:** dados que a GPU lê (vértices, constantes) moram na RAM e são lidos via PCIe; cópias em VRAM
       dos mais usados.
-4. 🧠 **Log e aviso de crash (7.x):** caixa de erro com a mensagem e o log salvo sozinho; hoje o jogo só fecha.
+4. 🟢 **Log e aviso de crash (7.x):** caixa de erro com a causa + cópia do log em `crashes/` + `tools/rea/crash_report.py` (16/10; falta o [USER] ver a caixa na janela).
 5. **Visual:** skybox com linhas, artefatos de iluminação, objetos sem render. O [USER] indica o lugar e cria saves.
 6. **Áudio (5.1):** hoje silêncio total.
 7. **Teclado do nome (5.6, swkbd):** hoje o jogo usa um nome padrão (`?瑱?` na ficha).

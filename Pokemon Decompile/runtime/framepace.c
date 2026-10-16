@@ -17,6 +17,11 @@
 void frametime_frame(uint64_t sleep_ns, uint64_t period_ns);  // runtime/frametime.c
 
 void framepace_present(int interval) {
+    {   // (PVRecomp, test) PVR_TEST_CRASH=<frame>: a FATAL at that presented frame (crash report / message box test)
+        static long crash_at = -1, frames;
+        if (crash_at < 0) crash_at = getenv("PVR_TEST_CRASH") ? atol(getenv("PVR_TEST_CRASH")) : 0;
+        if (crash_at && ++frames == crash_at) FATAL("test crash requested (PVR_TEST_CRASH=%ld)\n", crash_at);
+    }
     static int on = -1;
     static uint64_t fixed_period;
     if (on < 0) {

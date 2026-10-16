@@ -108,7 +108,17 @@ void plat_thread_realtime(uint64_t period_ns) {
 static char g_log_path[MAX_PATH];
 
 static void log_to_file_without_console(void) {
-    if (GetStdHandle(STD_ERROR_HANDLE) && GetStdHandle(STD_ERROR_HANDLE) != INVALID_HANDLE_VALUE) return;  // console / pipe
+    HANDLE eh = GetStdHandle(STD_ERROR_HANDLE);
+    if (eh && eh != INVALID_HANDLE_VALUE) {  // console / pipe / redirected file
+        // (PVRecomp) launched with the output redirected to a file (run_window.cmd > window.log): remember its path,
+        // so a fatal error can name and copy it (plat_fatal_notice). Before, the message box never appeared there.
+        if (GetFileType(eh) == FILE_TYPE_DISK) {
+            char p[MAX_PATH];
+            DWORD n = GetFinalPathNameByHandleA(eh, p, sizeof p, FILE_NAME_NORMALIZED);
+            if (n && n < sizeof p) snprintf(g_log_path, sizeof g_log_path, "%s", strncmp(p, "\\\\?\\", 4) ? p : p + 4);
+        }
+        return;
+    }
     char exe[MAX_PATH];
     DWORD n = GetModuleFileNameA(NULL, exe, sizeof exe);
     if (!n || n >= sizeof exe) return;
@@ -132,11 +142,45 @@ static void require_cpu(void) {
     ExitProcess(1);
 }
 
-// Fatal error (rt_fatal_trace): the last FATAL / exception line of the log in a message box, when there is no console.
+// Fatal error (rt_fatal_trace): the last FATAL / exception line of the log in a message box.
+// (PVRecomp) The whole log is first copied to <log dir>\crashes\crash_<date>_<time>.log (the next run overwrites the
+// log), and the box names that copy. No box in timed runs (PVR_RUN_SECONDS > 0: the test pipeline must not block on
+// it) or with PVR_NO_CRASH_BOX=1; only the first thread to fail reports (others wait: one box, one copy).
+static char g_crash_copy[MAX_PATH];
+static void save_crash_copy(void) {
+    char dir[MAX_PATH];
+    snprintf(dir, sizeof dir, "%s", g_log_path);
+    char *slash = strrchr(dir, '\\');
+    if (!slash) slash = strrchr(dir, '/');
+    if (slash) slash[1] = 0; else dir[0] = 0;
+    strncat(dir, "crashes", sizeof dir - strlen(dir) - 1);
+    CreateDirectoryA(dir, NULL);
+    SYSTEMTIME t;
+    GetLocalTime(&t);
+    snprintf(g_crash_copy, sizeof g_crash_copy, "%s\\crash_%04d%02d%02d_%02d%02d%02d.log", dir, t.wYear, t.wMonth, t.wDay,
+             t.wHour, t.wMinute, t.wSecond);
+    FILE *in = fopen(g_log_path, "rb"), *out = in ? fopen(g_crash_copy, "wb") : NULL;
+    if (out) {
+        static char buf[1 << 16];
+        size_t n;
+        while ((n = fread(buf, 1, sizeof buf, in)) > 0) fwrite(buf, 1, n, out);
+        fclose(out);
+        fprintf(stderr, "[crash] log copied to %s\n", g_crash_copy);
+    } else {
+        g_crash_copy[0] = 0;
+    }
+    if (in) fclose(in);
+}
+
 void plat_fatal_notice(void) {
+    static volatile LONG once;
+    if (InterlockedExchange(&once, 1)) Sleep(INFINITE);  // another thread is already reporting
     if (!g_log_path[0]) return;
     fflush(stderr);
-    char text[1024] = "PSV Recomp stopped because of an error.";
+    save_crash_copy();
+    const char *rs = getenv("PVR_RUN_SECONDS");
+    if (getenv("PVR_NO_CRASH_BOX") || (rs && atoi(rs) > 0)) return;
+    char text[1400] = "PSV Recomp stopped because of an error.";
     FILE *f = fopen(g_log_path, "rb");
     if (f) {
         static char tail[16384];
@@ -161,8 +205,8 @@ void plat_fatal_notice(void) {
         }
     }
     size_t l = strlen(text);
-    snprintf(text + l, sizeof text - l, "\n\nDetails: %s", g_log_path);
-    MessageBoxA(NULL, text, "PSV Recomp", MB_ICONERROR | MB_OK);
+    snprintf(text + l, sizeof text - l, "\n\nDetails: %s", g_crash_copy[0] ? g_crash_copy : g_log_path);
+    MessageBoxA(NULL, text, "PSV Recomp", MB_ICONERROR | MB_OK | MB_TOPMOST | MB_SETFOREGROUND);
 }
 
 void plat_init(void) {

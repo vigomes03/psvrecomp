@@ -57,6 +57,8 @@ python tools/verify/gates.py run host --version v400
 | `PVR_XFB_NOSTORE=1` | (medição, quebra a imagem) shaders de xfb sem as escritas |
 | `PVR_OCCLUSION_ZERO=1` | A/B: occlusion query volta a reportar 0 pixels (o jogo esconde o personagem no mundo aberto) |
 | (sempre ligado) `[frametime]` no log | a cada 10 s e no fim: média, p50/p95/p99, máx, 1% low, picos >1,5x o período e a causa (shader, upload, gpu, jogo). `PVR_FRAMETIME_CSV=<arquivo>`: uma linha por frame; `PVR_FRAMETIME_EVERY=<s>` muda o intervalo. "work" = tempo da thread que apresenta, não do jogo todo |
+| (sempre) relatório de crash | erro fatal ou exceção: o log inteiro é copiado para `<pasta do log>\crashes\crash_<data>_<hora>.log` e aparece uma caixa com a causa (não aparece em execuções com tempo, `PVR_RUN_SECONDS` > 0, nem com `PVR_NO_CRASH_BOX=1`). Ler: `python tools/rea/crash_report.py <log>` (nomeia as funções do jogo, `f_<endereço>`, com o mesmo build) |
+| `PVR_TEST_CRASH=<frame>` | provoca um erro fatal nesse frame (teste do relatório de crash) |
 | `PVR_SUBS=<1..64>` | quantas submissões em voo o backend usa (padrão 64; o LAS usava 8) — A/B de desempenho |
 
 Detalhe de uso e armadilhas: skill `switch-static-recompilation` (referência `vulkan-backend.md`).
