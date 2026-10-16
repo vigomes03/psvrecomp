@@ -2175,17 +2175,37 @@ static void emit_insn(Ctx *c, uint64_t w, uint32_t pc) {
         int pd = (int)bits(w, 48, 3);
         if (c->stage == STAGE_VERTEX) {
             set_reg(c, d, R(a));  // no SIMD-group functions in vertex functions: lane-local value
-        } else if (c->glsl) {  // a quad xor (lane mask < 4) is the subgroup xor within the quad
-            static const char *const fn[] = {"subgroupShuffle", "subgroupShuffleUp", "subgroupShuffleDown", "subgroupShuffleXor"};
+        } else if (c->glsl) {
             uint32_t imm = (uint32_t)bits(w, 20, 5);
-            if (mode == 3 && bits(w, 28, 1) && imm >= 1 && imm <= 3 && c->stage == STAGE_FRAGMENT && !getenv("PVR_NO_QUADSWAP")) {
+            bool mask_imm = bits(w, 29, 1) != 0;
+            uint32_t mimm = (uint32_t)bits(w, 34, 13);
+            char mb[32];
+            const char *mv = mask_imm ? (sprintf(mb, "%uu", mimm), mb) : R((int)bits(w, 39, 8));
+            if (mode == 3 && bits(w, 28, 1) && imm >= 1 && imm <= 3 && mask_imm && mimm == ((28u << 8) | 3u) &&
+                c->stage == STAGE_FRAGMENT && !getenv("PVR_NO_QUADSWAP")) {
                 // (PVRecomp, as Eden's QuadSwap) quad butterfly: quad ops are defined across helper invocations
                 static const char *const q[] = {"", "subgroupQuadSwapHorizontal", "subgroupQuadSwapVertical", "subgroupQuadSwapDiagonal"};
                 c->uses_quad = true;
                 sprintf(t, "%s(%s)", q[imm], R(a));
-            } else
-            sprintf(t, "%s(%s, uint(%s))", fn[mode], R(a), bv);
-            set_reg(c, d, t);
+                set_reg(c, d, t);
+                if (pd != PT) { c->pred_used[pd] = 1; sp(&c->body, "    p%d = true;\n", pd); }
+            } else {
+                // (PVRecomp) The mask operand was ignored: bits 0-4 clamp, 8-12 segment mask (shuffles inside groups of
+                // lanes), and the predicate says whether the source lane was in bounds (else the value stays the
+                // lane's own). Same formulas as Eden's GLSL backend (emit_glsl_warp.cpp).
+                static const char *const src[] = {"((%s) & ~sm_) | mn_", "ln_ - (%s)", "ln_ + (%s)", "ln_ ^ (%s)"};
+                char sexp[96];
+                snprintf(sexp, sizeof sexp, src[mode], bv);
+                sp(&c->body, "    { uint ln_ = gl_SubgroupInvocationID, mk_ = %s, sm_ = (mk_ >> 8) & 31u, cl_ = mk_ & 31u;\n", mv);
+                sp(&c->body, "      uint mn_ = ln_ & sm_, mx_ = mn_ | (cl_ & ~sm_), sr_ = %s, v_ = %s;\n", sexp, R(a));
+                sp(&c->body, "      bool ib_ = %s;\n", mode == 1 ? "int(sr_) >= int(mx_)" : "int(sr_) <= int(mx_)");
+                sp(&c->body, "      uint s_ = subgroupShuffle(v_, sr_ & 31u);\n");
+                if (d != RZ) { sp(&c->body, "      r%d = ib_ ? s_ : v_;\n", d); c->reg_cb[d] = 0; }
+                if (pd != PT) { c->pred_used[pd] = 1; sp(&c->body, "      p%d = ib_;\n", pd); }
+                sp(&c->body, "    }\n");
+                if (d != RZ) c->reg_used[d] = 1;
+            }
+            pd = PT;  // (written above)
         } else if (mode == 3) {
             bool quad = bits(w, 28, 1) && bits(w, 20, 5) < 4;
             sprintf(t, quad ? "quad_shuffle_xor(%s, ushort(%s))" : "simd_shuffle_xor(%s, ushort(%s))", R(a), bv);

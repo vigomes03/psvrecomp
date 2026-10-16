@@ -62,8 +62,9 @@ Ordem de trabalho (atualizada no fim de 15/10; 🟢 = provado por run_auto/teste
       dos mais usados.
 4. 🟢 **Log e aviso de crash (7.x):** caixa de erro com a causa + cópia do log em `crashes/` + `tools/rea/crash_report.py` (16/10; falta o [USER] ver a caixa na janela).
 5. **Visual:** 🟢 céu com faixa corrigido 16/10 (LUT 3D de atmosfera com block depth errado: layout empacotado 3D ignorado em nvn/objects.c; o céu ficou azul-claro como no jogo). 🟢 chão de areia no lugar da grama corrigido 16/10 (TLDS de array 2D com coordenadas transpostas no tradutor: o
-   terreno lia o mapa de materiais no ponto espelhado); draws indiretos passaram a ser executados. Falta: árvores no
-   Poco Path (conferir após a correção), artefatos de iluminação — o [USER] indica o lugar e cria saves.
+   terreno lia o mapa de materiais no ponto espelhado); draws indiretos passaram a ser executados. 🟢 árvores corrigidas
+   16/10 (S2R de lane = 0 no culling da GPU). Novos lugares com diferença: o [USER] indica, criamos save e comparamos
+   com o Eden (`eden.exe -g lab/eden_game/violet.xci`, update em `lab/eden_content`, relógio igual via `PVR_CLOCK_START`).
    Comparação com o Eden (referência, mesmo save, mesmo ponto; `lab/host-diag/ab_eden_big.png`, 16/10):
    - [x] **Árvores ausentes** — corrigido 16/10 (S2R LANEID/LTMASK = 0 no append agregado por warp do culling da GPU)
    - [x] Imagem clara/lavada, sombras sem azul, pouca oclusão — **não eram bugs de luz**: hora do dia diferente entre as
