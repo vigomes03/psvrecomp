@@ -234,9 +234,18 @@ int plat_text_prompt(const char *title, const char *initial, int max_len, char *
     wchar_t wt[128], wi[128];
     MultiByteToWideChar(CP_UTF8, 0, title, -1, wt, 128);
     MultiByteToWideChar(CP_UTF8, 0, initial ? initial : "", -1, wi, 128);
-    int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN), ww = 420, wh = 150;
+    // centred on the monitor of the window in focus (the game's, monitor 2 for [USER]), not on the primary one: there
+    // the box went unseen and the game looked frozen while it waited for the name
+    int ww = 420, wh = 150;
+    RECT area = {0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN)};
+    HWND fg = GetForegroundWindow();
+    MONITORINFO mi = {.cbSize = sizeof mi};
+    if (fg && GetMonitorInfoW(MonitorFromWindow(fg, MONITOR_DEFAULTTOPRIMARY), &mi)) area = mi.rcWork;
     HWND h = CreateWindowExW(WS_EX_TOPMOST | WS_EX_DLGMODALFRAME, L"PsvTextPrompt", wt, WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
-                             (sw - ww) / 2, (sh - wh) / 2, ww, wh, NULL, NULL, hi, NULL);
+                             area.left + (area.right - area.left - ww) / 2, area.top + (area.bottom - area.top - wh) / 2, ww,
+                             wh, NULL, NULL, hi, NULL);
+    fprintf(stderr, "[swkbd] text box shown at %ld,%ld (waiting for the player)\n", area.left + (area.right - area.left - ww) / 2,
+            area.top + (area.bottom - area.top - wh) / 2);
     if (!h) return 0;
     HFONT f = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
     g_tp_edit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", wi, WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL, 15, 15, 375,
