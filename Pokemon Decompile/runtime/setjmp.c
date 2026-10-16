@@ -12,16 +12,32 @@
 
 #include "hle.h"
 
-#define SLOTS 64
+#define SLOTS 256
 typedef struct { uint64_t env; jmp_buf buf; } JmpSlot;
 static __thread JmpSlot slots[SLOTS];
 static __thread int nslots;
 static __thread uint64_t jmp_value;
 
 jmp_buf *rt_jmp_slot(uint64_t env) {
+    // (PVRecomp) Drop checkpoints of frames that already returned: arming a buffer at stack address E means the
+    // caller's frame is at E, so buffers of the SAME stack below E (deeper frames) are dead. Live outer buffers
+    // are above E. Before, slots only left by FIFO eviction at 64: Lua's outermost protected call (armed once,
+    // top of the thread stack) was evicted after 64 newer setjmps and its error longjmp died with "without a host
+    // checkpoint" (Poco Path, 16/10). Buffers far from E (heap, other stacks) are left alone.
+    int k = 0;
+    for (int i = 0; i < nslots; i++) {
+        bool dead = slots[i].env < env && env - slots[i].env < (64ull << 20);
+        if (!dead) {
+            if (k != i) slots[k] = slots[i];
+            k++;
+        }
+    }
+    nslots = k;
     for (int i = 0; i < nslots; i++)
         if (slots[i].env == env) return &slots[i].buf;  // re-armed (a setjmp in a loop): same guest buffer
-    if (nslots == SLOTS) {  // oldest first: drop it (its frame is long gone in practice)
+    if (nslots == SLOTS) {  // still full (heap buffers): drop the oldest
+        static int warned;
+        if (!warned++) LOG("[setjmp] %d live checkpoints: dropping the oldest\n", SLOTS);
         memmove(slots, slots + 1, (SLOTS - 1) * sizeof *slots);
         nslots--;
     }
