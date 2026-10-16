@@ -71,7 +71,7 @@ Ordem de trabalho (atualizada no fim de 15/10; 🟢 = provado por run_auto/teste
      capturas (o Violet segue o relógio; 1 dia = 72 min) + árvores ausentes. Com `PVR_CLOCK_START` no instante da captura
      do Eden: luminância 134,3 vs 133,2, contraste 65,5 vs 65,9, saturação 101,6 vs 99,6, diferença média 5/255 (16/10)
    - [ ] Pequeno: névoa/desfoque de distância um pouco mais suave no Eden (fundo central)
-   - [ ] **Névoa/vapor sobre as lagoas e encostas ausente** (save `lab/saves/user_lighthouse_20261016`, em cima do
+   - [x] **Névoa/vapor sobre as lagoas e encostas ausente** — corrigido 16/10: `IPA` modo multiply ignorava o registrador multiplicador (a névoa lia a profundidade da cena num texel fixo e se apagava). Antes: (save `lab/saves/user_lighthouse_20261016`, em cima do
      farol, vs Eden no mesmo relógio): o Eden mostra fiapos brancos de neblina sobre as lagoas do vale e junto aos
      paredões; no nosso nunca aparecem (3 quadros). Resto da cena igual: mesmos objetos, árvores e prédios; luminância
      150,1 vs 151,1, saturação 103,2 vs 103,4, diferença média 7/255. Suspeita: partículas/volumes de névoa (efeito

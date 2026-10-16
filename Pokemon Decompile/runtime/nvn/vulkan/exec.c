@@ -1151,6 +1151,14 @@ static void override_glsl(char **msl, uint64_t addr, const char *suffix) {
     char path[512];
     snprintf(path, sizeof path, "%s/%llx_%s.glsl", dir, (unsigned long long)addr, suffix);
     FILE *f = fopen(path, "rb");
+    if (!f) {
+        // Shader addresses move between runs (shader pool allocation): also accept <dir>/s<fnv1a64 of the translated
+        // source>_<suffix>.glsl, the same name for the same shader in every run (tools: python fnv1a64 of the saved file).
+        uint64_t h = 0xcbf29ce484222325ull;
+        for (const unsigned char *q = (const unsigned char *)*msl; *q; q++) h = (h ^ *q) * 0x100000001b3ull;
+        snprintf(path, sizeof path, "%s/s%016llx_%s.glsl", dir, (unsigned long long)h, suffix);
+        f = fopen(path, "rb");
+    }
     if (!f) return;
     fseek(f, 0, SEEK_END);
     long n = ftell(f);
@@ -1169,8 +1177,11 @@ static void save_glsl(const char *src, uint64_t addr, const char *suffix) {
     mkdir("build/glsl", 0755);
     char path[256];
     snprintf(path, sizeof path, "build/glsl/%llx_%s.glsl", (unsigned long long)addr, suffix);
-    FILE *f = fopen(path, "w");
+    FILE *f = fopen(path, "wb");
     if (f) { fputs(src, f); fclose(f); }
+    uint64_t h = 0xcbf29ce484222325ull;  // content name accepted by PVR_GLSL_OVERRIDE (stable across runs)
+    for (const unsigned char *q = (const unsigned char *)src; *q; q++) h = (h ^ *q) * 0x100000001b3ull;
+    LOG("[glsl] saved %llx_%s = s%016llx_%s\n", (unsigned long long)addr, suffix, (unsigned long long)h, suffix);
 }
 
 static void compile_program(void *arg) {
