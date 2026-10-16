@@ -73,3 +73,7 @@ desktop.ini
 # saídas brutas dos workers (o aceito vai para o projeto)
 /work/out/
 /hactoolnet/
+
+# Eden (emulador de referência, binário baixado): nunca no git
+Eden-Windows-*/
+eden-master/
