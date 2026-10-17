@@ -44,6 +44,6 @@ O artefato do npm 6.4.0 **não serve** para este snapshot (`privateBridgeDescrip
 ## Ainda NÃO instalado (próximo passo para o projeto Pokémon)
 - **Chaves**: `prod.keys` (e `title.keys`, se houver) tiradas do **seu** console com Lockpick_RCM →
   colocar em `D:\Dev\REA\keys\` (ignorado pelo git). Sem elas, o hactool só lê o cabeçalho do XCI.
-- Dump: `Pokémon Violet.xci`, cartucho 8 GB; partições `update` (225 arquivos, firmware), `logo`, `normal` (vazia),
+- ROM/dump: `roms/Pokémon Violet.xci`, cartucho 8 GB; partições `update` (225 arquivos, firmware), `logo`, `normal` (vazia),
   `secure` (o jogo, NCAs criptografados). Extração vai para `dumps/` (ignorado).
 - Formatos de asset da Game Freak (TRPAK/FlatBuffers etc.) ainda sem ferramenta escolhida.

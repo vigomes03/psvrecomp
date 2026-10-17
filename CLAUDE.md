@@ -98,7 +98,7 @@ Valem para o qwen como worker **e** para qualquer modelo local que assuma o chat
    por script com o mesmo texto: cartão sem a API real e sem aceite checável é rejeitado antes de despachar.
 
 ## 5. Privacidade e parte legal (inegociável)
-- O dump (`Pokémon Violet/*.xci`), chaves (`prod.keys`, `title.keys`), `exefs/`, `romfs/`, código gerado e saídas de
+- As ROMs/dumps (`roms/*.xci`, `roms/*.nsp`), chaves (`prod.keys`, `title.keys`), `exefs/`, `romfs/`, código gerado e saídas de
   Ghidra/REA sobre o jogo são **privados**: ficam em pastas ignoradas (`.gitignore`), **nunca** em commit, issue,
   chat público ou upload.
 - `docs/` pode descrever **como** algo funciona (arquitetura, nomes de sistemas, offsets curtos como referência);
@@ -118,7 +118,7 @@ D:\Dev\REA\
 ├─ work/                   cartões e notas de trabalho (versionado, sem conteúdo do jogo)
 ├─ lab/                    alvos, snapshots, relatórios brutos      [ignorado]
 ├─ Pokemon Decompile/      nosso projeto de decompilação (o que for nosso é versionado)
-├─ Pokémon Violet/         dump do Switch                           [PRIVADO, ignorado]
+├─ roms/                   ROMs/dumps do Switch                    [PRIVADO, ignorado]
 └─ ref/                                    referências de terceiros  [ignorado]
 ```
 Ferramentas pesadas fora do repo: `D:\Tools` (Ghidra, JDK, MinGW), `D:\msys64`.

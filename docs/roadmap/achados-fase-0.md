@@ -2,13 +2,13 @@
 
 > Só metadados (nomes, tamanhos, IDs). Nenhum conteúdo do jogo.
 
-## Arquivos do dump (`Pokémon Violet/`, privado, ignorado)
+## Arquivos das ROMs (`roms/`, privado, ignorado)
 
 | Arquivo | Tamanho | O quê |
 |---|---:|---|
-| `Pokémon Violet.xci` | 7.985.954.816 | cartucho 8 GB, jogo base (v1.0.0 presumido ❓) |
-| `Pokémon Violet v4.0.0.nsp` | 5.235.895.884 | update **v4.0.0** (liberado pelo [USER] em 16/10: base do recomp e do Eden de referência) |
-| `The Legend of Zelda Links Awakening [01006BB00C6F0000][v0].nsp` | 6.274.802.512 | Zelda LA v1.0.0. ⛔ **NÃO USAR** até confirmar que veio do console/compra do [USER] |
+| `roms/Pokémon Violet.xci` | 7.985.954.816 | cartucho 8 GB, jogo base (v1.0.0 presumido ❓) |
+| `roms/Pokémon Violet v4.0.0.nsp` | 5.235.895.884 | update **v4.0.0** (liberado pelo [USER] em 16/10: base do recomp e do Eden de referência) |
+| `roms/The Legend of Zelda Links Awakening [01006BB00C6F0000][v0].nsp` | 6.274.802.512 | Zelda LA v1.0.0. ⛔ **NÃO USAR** até confirmar que veio do console/compra do [USER] |
 
 **Decisão (14/10, revista em 16/10):** base = **cartucho v1.0.0** do console do [USER]; o update **v4.0.0** foi liberado
 pelo [USER] e é a versão de trabalho. Zelda continua só depois de confirmada a origem.
