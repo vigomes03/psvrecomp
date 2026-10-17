@@ -200,11 +200,17 @@ NVN(nvnMemoryPoolInitialize) {
         g_nvn_pool_ranges[g_nvn_pool_count++][1] = p->size;
         g_nvn_pool_gen++;
     }
+    backend_pool_init(p->storage, p->size, p->flags);
     if (getenv("PVR_DIAG_POOLS")) LOG("[pool] storage %llx size %llx (%llu MB) flags %#x\n", (unsigned long long)p->storage,
                                       (unsigned long long)p->size, (unsigned long long)(p->size >> 20), p->flags);
     RET(1);
 }
-NVN(nvnMemoryPoolFinalize) { free(HOST(NvnPool, A(0))); SET_HOST(A(0), 0); }
+NVN(nvnMemoryPoolFinalize) {
+    NvnPool *p = HOST(NvnPool, A(0));
+    if (p) backend_pool_fini(p->storage, p->size);
+    free(p);
+    SET_HOST(A(0), 0);
+}
 NVN(nvnMemoryPoolSetDebugLabel) { (void)c; }
 NVN(nvnMemoryPoolMap) { RET(HOST(NvnPool, A(0))->storage); }
 NVN(nvnMemoryPoolGetBufferAddress) { RET(HOST(NvnPool, A(0))->storage); }  // GPU address == CPU address

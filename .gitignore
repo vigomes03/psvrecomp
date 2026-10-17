@@ -77,3 +77,4 @@ desktop.ini
 # Eden (emulador de referência, binário baixado): nunca no git
 Eden-Windows-*/
 eden-master/
+Eden-Windows/

@@ -37,8 +37,29 @@ static LONG CALLBACK vectored_handler(EXCEPTION_POINTERS *ep) {
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
+// (PVRecomp) The window is reserved with MEM_WRITE_WATCH: the OS records which pages the CPU wrote, and the Vulkan
+// backend keeps VRAM copies of GPU data that live in guest memory, refreshing only the written pages of the ranges a
+// draw binds (plat_write_watch). (Read-only pages + a fault handler was tried too: the GPU also writes these pages
+// through the host import, and a read-only page made those writes fault on the GPU: device lost.)
+// PVR_NO_WRITE_WATCH=1: plain reservation (and no VRAM mirrors).
+static bool g_write_watch;
+bool plat_write_watch_on(void) { return g_write_watch; }
+
+int plat_write_watch(uint64_t addr, uint64_t size, uint64_t *pages, int max) {
+    if (!g_write_watch) return -1;
+    ULONG_PTR n = (ULONG_PTR)max;
+    DWORD gran;
+    if (GetWriteWatch(WRITE_WATCH_FLAG_RESET, (void *)(uintptr_t)addr, (SIZE_T)size, (PVOID *)pages, &n, &gran) != 0) return -1;
+    return n == (ULONG_PTR)max ? -1 : (int)n;  // (full list: maybe more pages than fit, caller treats all as written)
+}
+
 bool plat_reserve_guest(uint64_t lo, uint64_t hi) {
-    void *p = VirtualAlloc((void *)(uintptr_t)lo, hi - lo, MEM_RESERVE, PAGE_READWRITE);
+    g_write_watch = !getenv("PVR_NO_WRITE_WATCH");
+    void *p = VirtualAlloc((void *)(uintptr_t)lo, hi - lo, MEM_RESERVE | (g_write_watch ? MEM_WRITE_WATCH : 0), PAGE_READWRITE);
+    if (p != (void *)(uintptr_t)lo && g_write_watch) {  // (not supported: plain reservation)
+        g_write_watch = false;
+        p = VirtualAlloc((void *)(uintptr_t)lo, hi - lo, MEM_RESERVE, PAGE_READWRITE);
+    }
     if (p != (void *)(uintptr_t)lo) return false;
     g_lo = lo;
     g_hi = hi;

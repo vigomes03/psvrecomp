@@ -102,6 +102,7 @@ void vk_image_init_layout(VkCommandBuffer cb, VkImage img, VkImageAspectFlags as
 void vk_defer_image(VkImage img, VmaAllocation mem);
 void vk_defer_view(VkImageView v);
 void vk_defer_buffer(VkBuffer buf, VkDeviceMemory mem);  // destroyed once the open submission completes
+void vk_defer_vma_buffer(VkBuffer buf, VmaAllocation mem);  // same, for a VMA buffer
 void vk_views_forget(TexBackend *b);  // drop (deferred) the cached views of an image being replaced
 uint64_t vk_frame_counter(void);
 

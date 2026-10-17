@@ -239,6 +239,7 @@ void vk_collect_dead(void) {
     for (int i = 0; i < ndead; i++) {
         if (dead[i].seq > done) { dead[k++] = dead[i]; continue; }
         if (dead[i].view) vkDestroyImageView(g_vk.dev, dead[i].view, NULL);
+        else if (dead[i].buf && dead[i].mem) vmaDestroyBuffer(g_vk.vma, dead[i].buf, dead[i].mem);  // (VMA buffer)
         else if (dead[i].buf) { vkDestroyBuffer(g_vk.dev, dead[i].buf, NULL); vkFreeMemory(g_vk.dev, dead[i].devmem, NULL); }
         else vmaDestroyImage(g_vk.vma, dead[i].img, dead[i].mem);
     }
@@ -353,6 +354,7 @@ static void defer(Dead d) {
 void vk_defer_image(VkImage img, VmaAllocation mem) { defer((Dead){.img = img, .mem = mem}); }
 void vk_defer_view(VkImageView v) { defer((Dead){.view = v}); }
 void vk_defer_buffer(VkBuffer buf, VkDeviceMemory mem) { defer((Dead){.buf = buf, .devmem = mem}); }
+void vk_defer_vma_buffer(VkBuffer buf, VmaAllocation mem) { defer((Dead){.buf = buf, .mem = mem}); }
 
 void vk_dl_note_upload(void *img, uint32_t w, uint32_t h, uint32_t lv);  // (exec.c: LARECOMP_VK_DEVLOST_TRACE)
 
@@ -592,7 +594,8 @@ TexBackend *vk_tex(NvnTexture *t, bool for_render) {
 
 void renderer_mark_gpu_owned(NvnTexture *t) { tex_backend(t)->gpu_owned = true; }
 bool renderer_is_gpu_owned(NvnTexture *t) { return tex_backend(t)->gpu_owned; }
-void backend_pool_written(uint64_t addr, uint64_t size) { (void)addr; (void)size; }
+void vk_mirror_written(uint64_t addr, uint64_t size);
+void backend_pool_written(uint64_t addr, uint64_t size) { vk_mirror_written(addr, size); }  // (CPU flushes: VRAM mirrors stale)
 
 // Host-produced texel data (decoded video, any thread): applied on the render thread at the texture's next use.
 void renderer_upload_rgba(NvnTexture *t, const void *rgba, uint32_t w, uint32_t h, uint32_t stride) {

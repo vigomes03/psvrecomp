@@ -41,6 +41,9 @@ void backend_pool_written(uint64_t addr, uint64_t size) {
     (void)size;
 }
 
+void backend_pool_init(uint64_t storage, uint64_t size, uint32_t flags) { (void)storage; (void)size; (void)flags; }
+void backend_pool_fini(uint64_t storage, uint64_t size) { (void)storage; (void)size; }
+
 void renderer_sync(void) {
     // no-op
 }

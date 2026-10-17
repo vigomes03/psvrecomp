@@ -537,6 +537,7 @@ void backend_present(NvnTexture *t) {
     { extern void vk_indirect_frame_report(uint64_t frame); vk_indirect_frame_report(total_frames); }
     { extern void vk_rt_writeback_frame(uint64_t frame); vk_rt_writeback_frame(total_frames); }
     g_frame_counter++;
+    { extern void vk_mirror_frame(void); vk_mirror_frame(); }
     extern void input_frame(uint64_t frame);
     input_frame(total_frames);
     static long slow_ms = -1;

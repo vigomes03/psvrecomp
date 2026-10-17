@@ -18,6 +18,10 @@ extern "C" {
 // ---- guest address space
 // Claim [lo, hi) for the guest at exactly that address, readable/writable (pages may be backed lazily).
 bool plat_reserve_guest(uint64_t lo, uint64_t hi);
+bool plat_write_watch_on(void);  // guest window tracks CPU-written pages
+// Pages (4 KiB, addresses in pages[]) the CPU wrote in [addr, addr + size) since the last call, and reset; -1 if
+// unknown (no tracking, or more than max pages: treat the whole range as written).
+int plat_write_watch(uint64_t addr, uint64_t size, uint64_t *pages, int max);
 // Make sure [addr, addr+size) inside the guest window is backed (before the OS itself writes there, e.g.
 // file reads); a no-op where the whole window is backed from the start.
 void plat_commit(uint64_t addr, uint64_t size);

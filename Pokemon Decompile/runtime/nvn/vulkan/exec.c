@@ -15,6 +15,7 @@
 #include "vk.h"
 #include "../renderer.h"
 #include "../../settings.h"
+#include "../../platform.h"
 
 static uint32_t g_save_layer;  // (PVRecomp, diag) array layer renderer_save_texture_tex reads
 // PVRecomp: why draws are skipped (appended to the [vk] stats line as "skip why: ...")
@@ -422,11 +423,15 @@ static VkSpan copy_dedupe(int slot, const void *data, uint64_t size, uint64_t al
 static struct { uint64_t addr, size, seq; VkSpan span; } gcopy[GCOPY_TAB];
 static uint64_t gcopy_gen;  // bumped to drop every shared copy (guest memory written mid-list)
 static void guest_copy_flush(void) { gcopy_gen++; }
+static uint64_t stat_up_ubo, stat_up_ubo_n;  // (PVRecomp, prof) upload split: cbuf snapshots
+static int nmir;  // VRAM mirrors (below, after guest_direct)
+static uint64_t mir_bytes, mir_stat_hits, mir_stat_copies, mir_stat_copy_bytes, mir_stat_stale, mir_stat_changed;
 static VkSpan guest_copy(uint64_t addr, uint64_t size) {
     uint64_t seq = vk_pending_seq() + (gcopy_gen << 40), h = (addr * 0x9E3779B97F4A7C15ull) ^ (size * 0xC2B2AE3D27D4EB4Full);
     uint32_t slot = (uint32_t)(h ^ (h >> 32)) & (GCOPY_TAB - 1);
     if (gcopy[slot].seq == seq && gcopy[slot].addr == addr && gcopy[slot].size == size) return gcopy[slot].span;
     VkSpan s = vk_transient_copy((const void *)(uintptr_t)addr, size, 256);
+    stat_up_ubo += size; stat_up_ubo_n++;
     gcopy[slot].addr = addr; gcopy[slot].size = size; gcopy[slot].seq = seq; gcopy[slot].span = s;
     return s;
 }
@@ -585,6 +590,18 @@ const char *renderer_stats(void) {
              (unsigned long long)stat_draws, (unsigned long long)stat_skipped, (unsigned long long)stat_passes,
              (unsigned long long)stat_dispatches, (unsigned long long)stat_flushes, (double)stat_wait_ns / 1e6,
              atomic_exchange(&stat_compiles, 0), (unsigned long long)stat_feedback_copies, (double)stat_upload_bytes / 1048576.0);
+    if (prof > 0) {  // (PVRecomp, prof) how much of the upload is cbuf snapshots
+        size_t n = strlen(stats_text);
+        snprintf(stats_text + n, sizeof stats_text - n, " (cbuf %.1fMB in %llu copies) | vram mirrors %d pools %.0fMB, binds %llu, copies %llu (%.1fMB), stale %llu, changed %llu",
+                 (double)stat_up_ubo / 1048576.0, (unsigned long long)stat_up_ubo_n, nmir, (double)mir_bytes / 1048576.0,
+                 (unsigned long long)mir_stat_hits, (unsigned long long)mir_stat_copies, (double)mir_stat_copy_bytes / 1048576.0,
+                 (unsigned long long)mir_stat_stale, (unsigned long long)mir_stat_changed);
+        n = strlen(stats_text);
+        extern void vk_mirror_why(char *out, size_t n);
+        vk_mirror_why(stats_text + n, sizeof stats_text - n);
+        mir_stat_hits = mir_stat_copies = mir_stat_copy_bytes = mir_stat_stale = mir_stat_changed = 0;
+    }
+    stat_up_ubo = stat_up_ubo_n = 0;
     stat_feedback_copies = stat_upload_bytes = 0;
     if (prof) {
         prof_up = prof_up_ns;
@@ -700,6 +717,8 @@ static int debug_pass_no;
 
 static bool in_xfb_pass, want_xfb_pass;  // (PVRecomp) shared attachment-less pass for transform feedback (begin_pass)
 static void xs_flush(VkCommandBuffer cb);
+static void mir_flush_gpu(VkCommandBuffer cb);  // (VRAM mirrors, below)
+static void mir_sync_cpu(void);
 // (PVRecomp) Render-target write-back, PVR_RT_WRITEBACK=1 (A/B, slow). What the GPU renders into a texture stays in
 // its VkImage; the guest memory behind it is never updated. The Switch has one memory: the game (CPU, or another
 // texture object over the same bytes) can read what the GPU drew. yuzu's "High" GPU accuracy downloads such data,
@@ -796,6 +815,7 @@ static void vk_end_pass_at(int line) {
     vkCmdEndRendering(vk_cmd());
     in_pass = false;
     if (in_xfb_pass) { in_xfb_pass = false; xs_flush(vk_cmd()); }  // captured vertices -> guest memory
+    mir_flush_gpu(vk_cmd());  // (GPU writes of this pass -> VRAM mirrors)
     if (rtwb_on())
         for (int i = 0; i < rtwb_pass_rt.ncolor && i < 8; i++)
             if (rtwb_pass_rt.color[i]) rtwb_queue(rtwb_pass_rt.color[i], &rtwb_pass_rt.cview[i], rtwb_pass_rt.has_cview[i], vk_cmd());
@@ -1938,6 +1958,276 @@ static bool guest_direct(uint64_t addr, uint64_t size, VkBuffer *buf, VkDeviceSi
     return true;
 }
 
+// ================================================================== VRAM mirrors of GPU data in guest memory (PVRecomp, perf)
+// Violet's meshes live in big memory pools (one 350 MB CPU_UNCACHED|GPU_CACHED pool, many CPU_NO_ACCESS ones). Reading
+// vertices and indices straight from the imported host pages went over PCIe for every vertex of every pass: the
+// G-buffer pass took ~11 ms for ~1.2M vertices whatever the resolution, under 1 ms with the data in VRAM
+// (LARECOMP_VK_COPY_VERTICES elimination, 16/10). Each pool used by per-vertex streams or index buffers now gets a
+// device-local copy, bound instead of the host pages. The host pages stay the authoritative data; the copy follows:
+//  - CPU writes: the guest window is reserved with MEM_WRITE_WATCH; before each command list the pages written since
+//    the last check are copied (upload command buffer, which runs before the submission's draws);
+//  - GPU writes we know of (compute storage buffers, transform feedback, reported values, texture->buffer copies):
+//    copied host -> VRAM right after the writing work, in the main command buffer.
+// Instance-rate streams (GPU culling output, written by shader global stores we cannot see) keep reading host memory.
+// PVR_VRAM_MIRROR=0: off (old behaviour).
+#define MIR_MAX 8192
+#define MIR_SEG (16ull << 20)  // mirrors are made per 16 MB segment of a pool (whole 350 MB buffers crashed the driver)
+typedef struct { VkBuffer buf; VmaAllocation mem; uint32_t state; } MirSeg;  // state: 0 not yet, 1 mirrored, 2 never
+typedef struct {
+    uint64_t base, size;
+    uint32_t flags, never;  // never: CPU-only / shader code / no GPU access
+    MirSeg *seg;
+    uint32_t nseg;
+} Mir;
+static Mir mir[MIR_MAX];
+// Pools are created by several game threads at once: the table is locked (render-thread users take it per call).
+static pthread_mutex_t mir_lock = PTHREAD_MUTEX_INITIALIZER;
+#define MIR_BUDGET (2048ull << 20)  // VRAM cap for mirrors
+
+static bool mir_on(void) {
+    static int on = -1;
+    if (on < 0) on = (!getenv("PVR_VRAM_MIRROR") || atoi(getenv("PVR_VRAM_MIRROR")) != 0) && plat_write_watch_on();
+    return on;
+}
+
+static int mir_find(uint64_t addr) {  // pool containing addr (sorted by base, non-overlapping)
+    int lo = 0, hi = nmir - 1;
+    while (lo <= hi) {
+        int m = (lo + hi) / 2;
+        if (addr < mir[m].base) hi = m - 1;
+        else if (addr >= mir[m].base + mir[m].size) lo = m + 1;
+        else return m;
+    }
+    return -1;
+}
+
+static uint64_t seg_size(const Mir *m, uint32_t k) { uint64_t o = (uint64_t)k * MIR_SEG; return m->size - o < MIR_SEG ? m->size - o : MIR_SEG; }
+
+static void mir_remove(int i) {
+    for (uint32_t k = 0; k < mir[i].nseg; k++)
+        if (mir[i].seg[k].buf) {
+            vk_defer_vma_buffer(mir[i].seg[k].buf, mir[i].seg[k].mem);
+            mir_bytes -= seg_size(&mir[i], k);
+        }
+    free(mir[i].seg);
+    memmove(&mir[i], &mir[i + 1], (size_t)(nmir - i - 1) * sizeof *mir);
+    nmir--;
+}
+
+static void pool_init_locked(uint64_t storage, uint64_t size, uint32_t flags);
+void backend_pool_init(uint64_t storage, uint64_t size, uint32_t flags) {
+    pthread_mutex_lock(&mir_lock);
+    pool_init_locked(storage, size, flags);
+    pthread_mutex_unlock(&mir_lock);
+}
+static void pool_init_locked(uint64_t storage, uint64_t size, uint32_t flags) {
+    if (!size || nmir == MIR_MAX) return;
+    // Violet creates pools inside the storage of other pools: the outermost one is listed and mirrored
+    int j = mir_find(storage);
+    if (j >= 0 && storage + size <= mir[j].base + mir[j].size) return;
+    for (int i = 0; i < nmir; i++)
+        if (mir[i].base < storage + size && mir[i].base + mir[i].size > storage) {
+            if (getenv("PVR_DIAG_MIRROR") && mir[i].size >= (64ull << 20))
+                LOG("[mirror] big pool %llx removed by new pool %llx +%llx flags %#x\n", (unsigned long long)mir[i].base,
+                    (unsigned long long)storage, (unsigned long long)size, flags);
+            mir_remove(i); i--;
+        }
+    int i = 0;
+    while (i < nmir && mir[i].base < storage) i++;
+    memmove(&mir[i + 1], &mir[i], (size_t)(nmir - i) * sizeof *mir);
+    memset(&mir[i], 0, sizeof *mir);
+    mir[i].base = storage; mir[i].size = size; mir[i].flags = flags;
+    mir[i].never = (flags & 8) || (flags & 0x40) || !(flags & 0x30);  // GPU_NO_ACCESS / shader code / no GPU access
+    mir[i].nseg = (uint32_t)((size + MIR_SEG - 1) / MIR_SEG);
+    mir[i].seg = calloc(mir[i].nseg, sizeof *mir[i].seg);
+    nmir++;
+}
+
+void backend_pool_fini(uint64_t storage, uint64_t size) {
+    pthread_mutex_lock(&mir_lock);
+    int i = mir_find(storage);
+    if (i >= 0 && mir[i].base == storage && mir[i].size == size) {
+        if (getenv("PVR_DIAG_MIRROR") && size >= (64ull << 20)) LOG("[mirror] big pool %llx finalized\n", (unsigned long long)storage);
+        mir_remove(i);
+    }
+    pthread_mutex_unlock(&mir_lock);
+}
+
+// upload: into the upload buffer (before the submission's draws), else the main buffer (outside rendering)
+static void mir_copy_regions(bool upload, Mir *m, uint32_t k, const VkBufferCopy *rg, uint32_t n) {
+    // rg offsets are relative to segment k
+    VkBuffer src; VkDeviceSize soff;
+    uint64_t sb = m->base + (uint64_t)k * MIR_SEG;
+    // (guest_direct may import / replace memory windows and flush: take the command buffer after it)
+    if (!guest_direct(sb, seg_size(m, k), &src, &soff)) return;
+    VkCommandBuffer cb;
+    if (upload) {
+        static uint64_t barrier_seq;
+        cb = vk_upload_cmd();
+        if (barrier_seq != vk_pending_seq()) { barrier_seq = vk_pending_seq(); vk_full_barrier(cb); }  // (earlier submissions' writes)
+    } else cb = vk_cmd();
+    VkBufferCopy tmp[64];
+    for (uint32_t q0 = 0; q0 < n; q0 += 64) {
+        uint32_t c = n - q0 < 64 ? n - q0 : 64;
+        for (uint32_t q = 0; q < c; q++) { tmp[q] = rg[q0 + q]; tmp[q].srcOffset += soff; }
+        vkCmdCopyBuffer(cb, src, m->seg[k].buf, c, tmp);
+    }
+    for (uint32_t q = 0; q < n; q++) mir_stat_copy_bytes += rg[q].size;
+    mir_stat_copies += n;
+}
+
+// GPU writes into mirrored segments, copied host -> VRAM at the next safe point (outside rendering) in the main buffer.
+#define MIR_PEND 256
+static struct { uint64_t addr, size; } mir_pend[MIR_PEND];
+static int mir_npend;
+static bool mir_pend_all;
+static void mir_gpu_written(uint64_t addr, uint64_t size) {
+    if (!nmir || !size || !mir_bytes) return;
+    pthread_mutex_lock(&mir_lock);
+    int i = mir_find(addr);
+    if (i < 0) { for (i = 0; i < nmir && mir[i].base + mir[i].size <= addr; i++) {} }
+    bool hit = i < nmir && mir[i].base < addr + size;
+    pthread_mutex_unlock(&mir_lock);
+    if (!hit) return;
+    if (mir_npend == MIR_PEND) { mir_pend_all = true; return; }
+    mir_pend[mir_npend].addr = addr; mir_pend[mir_npend].size = size; mir_npend++;
+}
+
+static void mir_copy_range(uint64_t addr, uint64_t size) {  // host -> every mirrored segment it touches
+    int i = mir_find(addr);
+    if (i < 0) { for (i = 0; i < nmir && mir[i].base + mir[i].size <= addr; i++) {} }
+    for (; i < nmir && mir[i].base < addr + size; i++) {
+        Mir *m = &mir[i];
+        uint64_t a = addr > m->base ? addr : m->base, e = addr + size < m->base + m->size ? addr + size : m->base + m->size;
+        for (uint64_t x = a; x < e;) {
+            uint32_t k = (uint32_t)((x - m->base) / MIR_SEG);
+            uint64_t sb = m->base + (uint64_t)k * MIR_SEG, se = sb + seg_size(m, k), ye = e < se ? e : se;
+            if (m->seg[k].state == 1) { VkBufferCopy rg = {x - sb, x - sb, ye - x}; mir_copy_regions(false, m, k, &rg, 1); }
+            x = ye;
+        }
+    }
+}
+
+static void mir_flush_gpu(VkCommandBuffer cb) {  // (outside rendering)
+    if (!mir_npend && !mir_pend_all) return;
+    vk_full_barrier(cb);
+    pthread_mutex_lock(&mir_lock);
+    if (mir_pend_all) {
+        for (int i = 0; i < nmir; i++) mir_copy_range(mir[i].base, mir[i].size);
+    } else
+        for (int k = 0; k < mir_npend; k++) mir_copy_range(mir_pend[k].addr, mir_pend[k].size);
+    pthread_mutex_unlock(&mir_lock);
+    vk_full_barrier(vk_cmd());
+    mir_npend = 0; mir_pend_all = false;
+    mir_stat_stale++;
+}
+
+static uint64_t mir_why[6];  // (diag) refusals: no pool, never, crosses a segment, window/budget
+
+// CPU writes: the guest window is reserved with MEM_WRITE_WATCH. A bound range is checked once per command list
+// (write-watch query on that range only: its cost grows with the range, a query per segment per list cost ~1 s of
+// CPU per 2 s) and its written pages are copied in the upload buffer, which runs before the submission's draws.
+static uint64_t mir_list_id = 1;  // bumped per command list and after our own CPU writes to guest memory
+static uint64_t mir_sync_ns, mir_sync_calls, mir_ww_pages;
+#define MIR_SEEN 1024
+static struct { uint64_t addr, size, list; } mir_seen[MIR_SEEN];
+static void mir_sync_cpu(void) { mir_list_id++; }
+static void mir_refresh(Mir *m, uint32_t k, uint64_t addr, uint64_t size) {
+    uint64_t h = (addr * 0x9E3779B97F4A7C15ull) ^ size;
+    uint32_t slot = (uint32_t)(h >> 40) & (MIR_SEEN - 1);
+    if (mir_seen[slot].list == mir_list_id && mir_seen[slot].addr == addr && mir_seen[slot].size == size) return;
+    mir_seen[slot].addr = addr; mir_seen[slot].size = size; mir_seen[slot].list = mir_list_id;
+    uint64_t t0 = SDL_GetTicksNS();
+    mir_sync_calls++;
+    enum { MAXP = 4096 };
+    static uint64_t pages[MAXP + 1];
+    static VkBufferCopy rg[MAXP];
+    uint64_t sb = m->base + (uint64_t)k * MIR_SEG, ss = seg_size(m, k);
+    uint64_t a = addr & ~0xFFFull, e = (addr + size + 0xFFF) & ~0xFFFull;
+    if (a < sb) a = sb;
+    if (e > sb + ss) e = sb + ss;
+    int n = plat_write_watch(a, e - a, pages, MAXP + 1);
+    uint32_t nr = 0;
+    if (n < 0) rg[nr++] = (VkBufferCopy){a - sb, a - sb, e - a};
+    else
+        for (int q = 0; q < n; q++) {
+            uint64_t off = pages[q] - sb, len = 4096;
+            if (off + len > ss) len = ss - off;
+            if (nr && rg[nr - 1].srcOffset + rg[nr - 1].size == off) rg[nr - 1].size += len;
+            else rg[nr++] = (VkBufferCopy){off, off, len};
+        }
+    if (n) mir_ww_pages += n > 0 ? (uint64_t)n : (e - a) >> 12;
+    if (nr) mir_copy_regions(true, m, k, rg, nr);
+    mir_sync_ns += SDL_GetTicksNS() - t0;
+}
+
+// Device-local buffer holding [addr, addr + size), or false (bind the host memory as before).
+static bool mir_get_locked(uint64_t addr, uint64_t size, VkBuffer *buf, VkDeviceSize *off);
+static bool mir_get(uint64_t addr, uint64_t size, VkBuffer *buf, VkDeviceSize *off) {
+    if (!nmir || !mir_on()) return false;
+    pthread_mutex_lock(&mir_lock);
+    bool r = mir_get_locked(addr, size, buf, off);
+    pthread_mutex_unlock(&mir_lock);
+    return r;
+}
+static bool mir_get_locked(uint64_t addr, uint64_t size, VkBuffer *buf, VkDeviceSize *off) {
+    int i = mir_find(addr);
+    if (i < 0) {
+        mir_why[0]++;
+        static int nl;
+        if (getenv("PVR_DIAG_MIRROR") && nl < 6 && mir_why[0] % 20000 == 1) {
+            nl++;
+            int lin = -1, unsorted = 0;
+            for (int q = 0; q < nmir; q++) {
+                if (addr >= mir[q].base && addr < mir[q].base + mir[q].size) lin = q;
+                if (q && mir[q].base < mir[q - 1].base + mir[q - 1].size) unsorted++;
+            }
+            LOG("[mirror] no pool for %llx +%llu: linear %d, overlaps/unsorted %d, n %d\n", (unsigned long long)addr,
+                (unsigned long long)size, lin, unsorted, nmir);
+        }
+        return false;
+    }
+    Mir *m = &mir[i];
+    if (m->never) { mir_why[1]++; return false; }
+    uint32_t k = (uint32_t)((addr - m->base) / MIR_SEG);
+    uint64_t sb = m->base + (uint64_t)k * MIR_SEG, ss = seg_size(m, k);
+    if (addr + size > sb + ss) { mir_why[2]++; return false; }
+    MirSeg *g = &m->seg[k];
+    if (g->state == 2) { mir_why[1]++; return false; }
+    if (g->state == 0) {
+        VkBuffer src; VkDeviceSize soff;
+        if (mir_bytes + ss > MIR_BUDGET || !guest_direct(sb, ss, &src, &soff)) { g->state = 2; mir_why[3]++; return false; }
+        VkBufferCreateInfo bi = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = ss,
+                                 .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
+                                          VK_BUFFER_USAGE_TRANSFER_DST_BIT};
+        VmaAllocationCreateInfo ai = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+        if (vmaCreateBuffer(g_vk.vma, &bi, &ai, &g->buf, &g->mem, NULL) != VK_SUCCESS) { g->buf = VK_NULL_HANDLE; g->state = 2; return false; }
+        mir_bytes += ss;
+        g->state = 1;
+        static uint64_t scratch[16];
+        plat_write_watch(sb, ss, scratch, 16);  // (reset: the whole copy below runs later and sees every earlier write)
+        VkBufferCopy rg = {0, 0, ss};
+        mir_copy_regions(true, m, k, &rg, 1);
+        if (getenv("PVR_DIAG_MIRROR"))
+            LOG("[mirror] pool %llx flags %#x segment %u (%llu KB) mirrored, %.0f MB in VRAM\n", (unsigned long long)m->base, m->flags, k,
+                (unsigned long long)(ss >> 10), (double)mir_bytes / 1048576.0);
+    } else mir_refresh(m, k, addr, size);  // (CPU-written pages of the range since its last check)
+    mir_stat_hits++;
+    *buf = g->buf;
+    *off = addr - sb;
+    return true;
+}
+
+void vk_mirror_frame(void) {}
+void vk_mirror_written(uint64_t addr, uint64_t size) { (void)addr; (void)size; }  // (CPU flushes: write watch sees them)
+void vk_mirror_why(char *out, size_t n) {
+    snprintf(out, n, " why nopool %llu never %llu crosses %llu window %llu | sync %.0f ms in %llu calls, %llu written pages",
+             (unsigned long long)mir_why[0], (unsigned long long)mir_why[1], (unsigned long long)mir_why[2], (unsigned long long)mir_why[3],
+             (double)mir_sync_ns / 1e6, (unsigned long long)mir_sync_calls, (unsigned long long)mir_ww_pages);
+    mir_sync_ns = mir_sync_calls = mir_ww_pages = 0;
+    memset(mir_why, 0, sizeof mir_why);
+}
+
 // (PVRecomp) Transform-feedback scratch. Vertex shaders that store captured vertices straight into guest memory write
 // 4 bytes at a time over PCIe into the imported host pages: ~17 of ~29 ms of GPU per battle frame (PVR_XFB_NOSTORE
 // measurement: 0.14 ms without the stores). In the shared xfb pass they write to this device-local buffer instead,
@@ -2422,6 +2712,7 @@ static void draw_(CmdRec *r, bool indexed) {
     for (int i = 0; i < st.nattrib; i++) vkey.attr_kind[i] = (uint8_t)attr_kind(st.attrib[i] & 0xFF);
     for (int i = 0; i < st.rt.ncolor; i++) if (st.rt.color[i]) fkey.rt_kind[i] = (uint8_t)rt_kind(st.rt.color[i]->format);
     bool xfb_on = xfb_key(&vkey);
+    if (xfb_on) for (int b = 0; b < 4; b++) if (vkey.xfb_ncomp[b]) mir_gpu_written(xfb.addr[b], xfb.size[b]);  // (copied at pass end)
     int xs_idx[4] = {-1, -1, -1, -1};
     {   // shared xfb pass + device-local scratch: only buffers fully covered by the captured components (no holes)
         static int own = -1;
@@ -2860,7 +3151,7 @@ static void draw_(CmdRec *r, bool indexed) {
             uint32_t isz = itype == 1 ? 2 : 4;
             itype_vk = itype == 1 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
             icount = count;
-            if (iaddr % isz == 0 && guest_direct(iaddr, (uint64_t)count * isz, &ib.buf, &ib.off)) {
+            if (iaddr % isz == 0 && (mir_get(iaddr, (uint64_t)count * isz, &ib.buf, &ib.off) || guest_direct(iaddr, (uint64_t)count * isz, &ib.buf, &ib.off))) {
                 scan_src = src; scan_isz = isz; scan_restart = restart;  // max_index only if a stream gets copied
             } else {
                 ib = vk_transient_copy(src, (uint64_t)count * isz + 4, 4);
@@ -2898,8 +3189,8 @@ static void draw_(CmdRec *r, bool indexed) {
             Range v = st.vbuf[s];
             VkBuffer dbuf;
             VkDeviceSize doff;
-            if (v.addr && v.size && guest_direct(v.addr, v.size, &dbuf, &doff)) {
-                vkCmdBindVertexBuffers(cb, (uint32_t)s, 1, &dbuf, &doff);
+            if (v.addr && v.size && ((!k.divisor[s] && mir_get(v.addr, v.size, &dbuf, &doff)) || guest_direct(v.addr, v.size, &dbuf, &doff))) {
+                vkCmdBindVertexBuffers(cb, (uint32_t)s, 1, &dbuf, &doff);  // (per-vertex streams: VRAM mirror if static)
                 continue;
             }
             if (scan_src) {  // copying after all: the index scan bounds the copy
@@ -3822,7 +4113,10 @@ static void exec_list(uint64_t handle, int depth) {
                         (unsigned long long)st.sbuf[5][i].addr, (unsigned long long)st.sbuf[5][i].size);
                 LOG("[watch] dispatch %ux%ux%u\n", (uint32_t)r->x[0], (uint32_t)r->x[1], (uint32_t)r->x[2]);
             }
-            dispatch_compute((uint32_t)r->x[0], (uint32_t)r->x[1], (uint32_t)r->x[2]); break;
+            dispatch_compute((uint32_t)r->x[0], (uint32_t)r->x[1], (uint32_t)r->x[2]);
+            for (int i = 0; i < 16; i++) if (st.sbuf[5][i].addr) mir_gpu_written(st.sbuf[5][i].addr, st.sbuf[5][i].size ? st.sbuf[5][i].size : 4);
+            if (mir_npend || mir_pend_all) { vk_end_pass(); mir_flush_gpu(vk_cmd()); }
+            break;
         case CMD_DRAW_ARRAYS: draw(r, false); break;
         case CMD_XFB_BIND: case CMD_XFB_BEGIN: case CMD_XFB_END: case CMD_XFB_PAUSE: case CMD_XFB_RESUME: xfb_cmd(r->op, r); break;
         case CMD_DRAW_ELEMENTS: draw(r, true); break;
@@ -3831,6 +4125,7 @@ static void exec_list(uint64_t handle, int depth) {
         case CMD_UPDATE_UNIFORM_BUFFER:
             if (pvr_watch_hit(r->x[0] + r->x[2], r->x[3])) LOG("[watch] update ubo %llx +%llx size %llu\n", (unsigned long long)r->x[0], (unsigned long long)r->x[2], (unsigned long long)r->x[3]);
             memcpy((void *)(uintptr_t)(r->x[0] + r->x[2]), x, r->x[3]);
+            mir_sync_cpu();  // (our own CPU write: ranges are checked again)
             guest_copy_flush();  // (cbuf copies shared within the submission are stale now)
             break;
         case CMD_FENCE_SYNC: {
@@ -3870,6 +4165,8 @@ static void exec_list(uint64_t handle, int depth) {
             vk_full_barrier(fcb);
             vkCmdFillBuffer(fcb, b, o, 4, value);
             vk_full_barrier(fcb);
+            mir_gpu_written(addr, 4);
+            mir_flush_gpu(fcb);
             break;
         }
         case CMD_REPORT_COUNTER: {
@@ -3905,11 +4202,16 @@ static void exec_list(uint64_t handle, int depth) {
         case CMD_COPY_TEXTURE_TO_TEXTURE: { const TexRefRec *t = x; copy_texture(&t[0], &t[1], r->x[6]); break; }
         case CMD_DOWNSAMPLE: { const TexRefRec *t = x; copy_texture(&t[0], &t[1], 1); break; }
         case CMD_COPY_BUFFER_TO_TEXTURE: copy_buffer_to_texture(r->x[0], x); break;
-        case CMD_COPY_TEXTURE_TO_BUFFER: copy_texture_to_buffer(x, r->x[3]); break;
+        case CMD_COPY_TEXTURE_TO_BUFFER:
+            copy_texture_to_buffer(x, r->x[3]);
+            mir_gpu_written(r->x[3], 1ull << 24);  // (size unknown here: up to 16 MB of the pool)
+            if (mir_npend || mir_pend_all) { vk_end_pass(); mir_flush_gpu(vk_cmd()); }
+            break;
         case CMD_COPY_BUFFER_TO_BUFFER:
             if (pvr_watch_hit(r->x[1], r->x[2])) LOG("[watch] copy %llx -> %llx size %llu\n", (unsigned long long)r->x[0], (unsigned long long)r->x[1], (unsigned long long)r->x[2]);
             renderer_flush();
             memmove((void *)(uintptr_t)r->x[1], (void *)(uintptr_t)r->x[0], r->x[2]);
+            mir_sync_cpu();  // (VRAM mirrors: the copied pages, before the following draws)
             break;
         default: break;
         }
@@ -3924,6 +4226,7 @@ void renderer_frame_counters(uint64_t out[5]) {
 void backend_execute(uint64_t handle) {
     PROF_T0();
     uint64_t ft_t0 = SDL_GetTicksNS();
+    mir_sync_cpu();  // CPU-written pages -> VRAM mirrors, before this list's draws
     exec_list(handle, 0);
     ft_exec_ns += SDL_GetTicksNS() - ft_t0;
     PROF_ADD(prof_exec);
