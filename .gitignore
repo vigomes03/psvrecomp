@@ -3,11 +3,8 @@
 # Projetos de referência, dumps do console e saídas de análise ficam fora.
 # ─────────────────────────────────────────────────────────────────────────────
 
-# ── Projetos de referência (código de terceiros; estudamos, não versionamos) ──
-/rea-main/
-/LASRecomp-main/
-/LASRecomp-git/
-/eden-master/
+# ── Material de referência (código/artefatos de terceiros; estudamos, não versionamos) ──
+/ref/
 
 # ── Conteúdo PRIVADO: dumps do seu Switch (nunca commitar, nunca publicar) ──
 /Pokémon Violet/
@@ -74,7 +71,8 @@ desktop.ini
 /work/out/
 /hactoolnet/
 
-# Eden (emulador de referência, binário baixado): nunca no git
+# Compatibilidade com cópias antigas do Eden fora de /ref/ (nunca no git)
 Eden-Windows-*/
-eden-master/
 Eden-Windows/
+# Binário externo usado só na extração do dump
+/tools/hactoolnet/

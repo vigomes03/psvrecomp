@@ -19,7 +19,7 @@ import argparse, json, os, re, subprocess, sys, time, urllib.request
 from pathlib import Path
 
 NODE = r"C:\Program Files\nodejs\node.exe"
-REA = r"D:\Dev\REA\rea-main\rea-main\scripts\rea.mjs"
+REA = r"D:\Dev\REA\ref\rea-main\rea-main\scripts\rea.mjs"
 ENV = {**os.environ,
        "GHIDRA_INSTALL_DIR": r"D:\Tools\ghidra_12.1.4_PUBLIC",
        "JAVA_HOME": r"D:\Tools\jdk-21.0.12.1+1",

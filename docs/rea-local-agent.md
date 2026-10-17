@@ -13,7 +13,7 @@
 |---|---|
 | SO | Windows 11, shell = git-bash (sintaxe POSIX; `/d/...` funciona no bash) |
 | GPU / RAM | RTX 3070 Ti 8 GB VRAM / 32 GB RAM |
-| REA | `D:\Dev\REA\rea-main\rea-main` (6.4.0, snapshot do `main`, build local) |
+| REA | `D:\Dev\REA\ref\rea-main\rea-main` (6.4.0, snapshot do `main`, build local) |
 | Addon nativo Windows | compilado com MinGW em `native\windows\build` (`verify:windows-native:artifact` OK) |
 | Ghidra | `D:\Tools\ghidra_12.1.4_PUBLIC` (`GHIDRA_INSTALL_DIR`) |
 | JDK | `D:\Tools\jdk-21.0.12.1+1` (`JAVA_HOME`) |
@@ -181,7 +181,7 @@ e no Claude Code. Para não carregar 220k tokens de schemas, troque o bloco
   rea:
     command: C:\Program Files\nodejs\node.exe
     args:
-      - D:\Dev\REA\rea-main\rea-main\scripts\rea.mjs
+      - D:\Dev\REA\ref\rea-main\rea-main\scripts\rea.mjs
       - mcp
     env:
       GHIDRA_INSTALL_DIR: D:\Tools\ghidra_12.1.4_PUBLIC

@@ -175,12 +175,12 @@ Não há projeto de Ghidra/IDA no repo. A RE foi feita **instrumentando o própr
 ### Como compilar aqui
 ```bash
 export PATH="/d/msys64/ucrt64/bin:/d/msys64/usr/bin:$PATH"
-cd /d/Dev/REA/LASRecomp-main/LASRecomp-main
+cd /d/Dev/REA/ref/LASRecomp-main/LASRecomp-main
 make -j12 build/lasrecomp.exe          # runtime/app (sem jogo)
 # com o seu dump em extracted/:  make gen && make -j12   → generated/ + build/lasgame.dll
 # rodar: PATH com D:\msys64\ucrt64\bin (DLLs)  →  build\lasrecomp.exe
 ```
-Cópia com histórico git: `D:\Dev\REA\LASRecomp-git` (LF, `autocrlf=false`).
+Cópia com histórico git: `D:\Dev\REA\ref\LASRecomp-git` (LF, `autocrlf=false`).
 
 ---
 

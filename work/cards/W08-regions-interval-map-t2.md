@@ -16,7 +16,7 @@ The list only grows.
 Horizon keeps the address space as a block tree (`KMemoryBlockManager`): every address belongs to exactly one block,
 and an operation on a range **splits** the blocks at the range's edges and **coalesces** neighbours with the same
 state (`KMemoryBlockManager::Update` + `CoalesceForUpdate` in Atmosphère's mesosphere /
-`src/core/hle/kernel/k_memory_block_manager.cpp` in Eden, `D:\Dev\REA\eden-master`; read only, don't copy).
+`src/core/hle/kernel/k_memory_block_manager.cpp` in Eden, `D:\Dev\REA\ref\eden-master`; read only, don't copy).
 We need the same thing, simplified: a sorted array of non-overlapping intervals.
 
 ## Task

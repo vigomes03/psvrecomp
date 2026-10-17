@@ -33,7 +33,7 @@ for f in "$P"/*.c "$P"/services/*.c "$P"/hle/*.c "${NVN[@]}" "$P"/platform/windo
   objs+=("$o")
 done
 if [ "$BACKEND" = vulkan ]; then  # Vulkan Memory Allocator: header-only C++ (MSYS2 vulkan-memory-allocator)
-  clang++ -O2 -std=c++17 -w -c "D:/Dev/REA/LASRecomp-main/LASRecomp-main/runtime/nvn/vulkan/vma.cpp" -o "$OUT/rt/vma.o" || fail=1
+  clang++ -O2 -std=c++17 -w -c "D:/Dev/REA/ref/LASRecomp-main/LASRecomp-main/runtime/nvn/vulkan/vma.cpp" -o "$OUT/rt/vma.o" || fail=1
   objs+=("$OUT/rt/vma.o")
   # Overlay menu (phase 8): Dear ImGui + its Vulkan backend, our ui/*.cpp and the glue (LAS: same pieces). ImGui and its
   # backend only rebuild when missing (they never change).

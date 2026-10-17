@@ -6,14 +6,14 @@ Máquina: Windows 11, RTX 3070 Ti 8 GB, 32 GB RAM, C: quase cheio, então **tudo
 
 | Ferramenta | Caminho | Para quê | Verificação |
 |---|---|---|---|
-| REA (snapshot do `main`, v6.4.0) | `D:\Dev\REA\rea-main\rea-main` | RE via CLI/MCP | `rea doctor --provider ghidra` verde |
-| Addon nativo Windows do REA | `rea-main\native\windows\build` | Ghidra no Windows exige | `npm run verify:windows-native:artifact` |
+| REA (snapshot do `main`, v6.4.0) | `D:\Dev\REA\ref\rea-main\rea-main` | RE via CLI/MCP | `rea doctor --provider ghidra` verde |
+| Addon nativo Windows do REA | `ref\rea-main\rea-main\native\windows\build` | Ghidra no Windows exige | `npm run verify:windows-native:artifact` |
 | Ghidra 12.1.4 | `D:\Tools\ghidra_12.1.4_PUBLIC` (`GHIDRA_INSTALL_DIR`) | decompilação | ✅ |
 | Temurin JDK 21 | `D:\Tools\jdk-21.0.12.1+1` (`JAVA_HOME`) | Ghidra | ✅ |
 | MinGW-w64 (WinLibs GCC 16.2) | `D:\Tools\mingw64` | compilar o addon do REA | ✅ |
 | MSYS2 UCRT64 (clang 23, lld, make, SDL3, FFmpeg, Vulkan, shaderc, SPIRV-Tools, gdb) | `D:\msys64` | compilar LASRecomp / código nativo | ✅ `lasrecomp.exe` compila e abre |
-| Python 3.12 (uv) + unicorn 2.1.4, capstone 5.0.9, lz4 | `LASRecomp-main\...\tools\venv` | lifter / testes diferenciais | ✅ `test_simd.py` 0 falhas |
-| Zig 0.17.0 | `LASRecomp-main\...\build\zig` | `zig cc` | ✅ hash conferido |
+| Python 3.12 (uv) + unicorn 2.1.4, capstone 5.0.9, lz4 | `ref\LASRecomp-main\...\tools\venv` | lifter / testes diferenciais | `test_simd.py` registrado no pipeline de 14/10 (0 falhas) |
+| Zig 0.17.0 | `ref\LASRecomp-main\...\build\zig` | `zig cc` | hash registrado em `docs/pipeline-log.md` |
 | hactool (SciresM, `1d64a83`, compilado do fonte com WinLibs) | `D:\Tools\hactool\hactool.exe` (fonte em `D:\Tools\src\hactool`) | ler/extrair XCI/NCA/RomFS | ✅ lê o cabeçalho do XCI sem chaves |
 | Ollama + `qwen3-coder-64k` | serviço local `127.0.0.1:11434` | worker local | ✅ |
 

@@ -8,7 +8,7 @@ import re
 import sys
 from collections import Counter, defaultdict
 
-INC = "D:/Dev/REA/eden-master/eden/src/shader_recompiler/frontend/maxwell/maxwell.inc"
+INC = "D:/Dev/REA/ref/eden-master/eden/src/shader_recompiler/frontend/maxwell/maxwell.inc"
 
 
 def load_table():

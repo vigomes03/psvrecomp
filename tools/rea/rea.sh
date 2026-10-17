@@ -9,7 +9,7 @@ export JAVA_HOME='D:\Tools\jdk-21.0.12.1+1'
 # REA's native addon needs real Windows temp paths; MSYS shells set TMP=/tmp, which breaks its private runtime dir.
 export TMP="$LOCALAPPDATA\\Temp" TEMP="$LOCALAPPDATA\\Temp"
 NODE="/c/Program Files/nodejs/node.exe"
-REA="D:/Dev/REA/rea-main/rea-main/scripts/rea.mjs"
+REA="D:/Dev/REA/ref/rea-main/rea-main/scripts/rea.mjs"
 if [ -n "$REA_RAW" ] || [ "$1" = "--help" ] || [ "$1" = "doctor" ] || [[ " $* " == *" --help "* ]]; then
   exec "$NODE" "$REA" "$@"
 fi

@@ -119,7 +119,7 @@ D:\Dev\REA\
 ├─ lab/                    alvos, snapshots, relatórios brutos      [ignorado]
 ├─ Pokemon Decompile/      nosso projeto de decompilação (o que for nosso é versionado)
 ├─ Pokémon Violet/         dump do Switch                           [PRIVADO, ignorado]
-└─ rea-main/, LASRecomp-*/, eden-master/   referências de terceiros  [ignorado]
+└─ ref/                                    referências de terceiros  [ignorado]
 ```
 Ferramentas pesadas fora do repo: `D:\Tools` (Ghidra, JDK, MinGW), `D:\msys64`.
 
