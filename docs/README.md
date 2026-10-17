@@ -1,14 +1,14 @@
-# docs/: achados e guias
+# docs/: findings and guides
 
-| Arquivo | Conteúdo |
+| File | Content |
 |---|---|
-| [ambiente.md](ambiente.md) | Ferramentas instaladas, caminhos, armadilhas, o que falta instalar |
-| [rea-local-agent.md](rea-local-agent.md) | Guia do REA + agente local (qwen): arquitetura, contrato, comandos, modelos |
-| [rea-worker-reviews.md](rea-worker-reviews.md) | Revisões do Claude sobre cada execução do worker (aceito/rejeitado e por quê) |
-| [estudo-lasrecomp.md](estudo-lasrecomp.md) | Como o LAS Recomp foi feito: recompilação estática ARM64→C, HLE, NVN→Vulkan, fluxo de trabalho |
-| [pipeline-log.md](pipeline-log.md) | Registro de cada cartão de trabalho (dono, modelo, tentativas, resultado) |
-| [../psvrecomp/README.md](../psvrecomp/README.md) | **PSV Recomp**: o que é, como compilar/rodar, variáveis de diagnóstico |
-| [roadmap/](roadmap/README.md) | **Roadmap do Pokémon Violet Recomp**: fases 0-9, marcos, riscos |
+| [ambiente.md](ambiente.md) | Installed tools, paths, traps, missing installations |
+| [rea-local-agent.md](rea-local-agent.md) | REA + local agent (qwen) guide: architecture, contract, commands, models |
+| [rea-worker-reviews.md](rea-worker-reviews.md) | Claude's reviews of each worker execution (accepted/rejected and why) |
+| [estudo-lasrecomp.md](estudo-lasrecomp.md) | How LAS Recomp was made: static recompilation ARM64→C, HLE, NVN→Vulkan, workflow |
+| [pipeline-log.md](pipeline-log.md) | Log of each work card (owner, model, attempts, result) |
+| [../psvrecomp/README.md](../psvrecomp/README.md) | **PSV Recomp**: what it is, how to compile/run, diagnostic variables |
+| [roadmap/](roadmap/README.md) | **Pokémon Violet Recomp Roadmap**: phases 0-9, milestones, risks |
 
-Regras de escrita: fatos verificados marcados (✅ executado / 📖 lido no código / ❓ hipótese), sempre com o
-caminho ou o `evidence_id` de onde veio. Nada de código ou asset do jogo colado aqui (ver CLAUDE.md, seção Privacidade).
+Writing rules: verified facts marked (✅ executed / 📖 read in code / ❓ hypothesis), always with the
+path or `evidence_id` from where it came. Nothing of game code or assets pasted here (see CLAUDE.md, Privacy section).

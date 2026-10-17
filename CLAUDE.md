@@ -1,144 +1,141 @@
-# CLAUDE.md: diretrizes do workspace REA
+# CLAUDE.md: REA workspace guidelines
 
-> Lido por Claude (Hermes desktop / Claude Code) e por qualquer agente que trabalhe aqui.
-> Objetivo (IDEA.md): **decompilar Pokémon Scarlet/Violet para uso pessoal e entender como é feito um jogo AAA.**
+> Read by Claude (Hermes desktop / Claude Code) and any agent working here.
+> Goal (IDEA.md): **decompile Pokémon Scarlet/Violet for personal use and understand how an AAA game is made.**
 
-## 1. Papéis: Claude orquestra, os modelos locais executam
+## 1. Roles: Claude orchestrates, local models execute
 
-**Claude é o orquestrador, não o executor.** Todo trabalho de execução vai para os modelos locais
-(Ollama, `qwen3-coder-64k` por padrão). Claude:
-- entende o pedido, quebra em **cartões** pequenos e verificáveis, escolhe ferramenta e modelo;
-- despacha os cartões e **verifica** cada entrega contra a evidência real;
-- aceita, devolve com os erros exatos (no máximo 3 tentativas) ou escala;
-- decide arquitetura, registra os achados em `docs/` e reporta ao [USER].
+**Claude is the conductor, not the executor.** All execution work goes to local models
+(Ollama, `qwen3-coder-64k` by default). Claude:
+- understands the request, breaks it into **small and verifiable cards**, chooses tool and model;
+- dispatches cards and **verifies** each delivery against real evidence;
+- accepts, returns with exact errors (maximum 3 attempts) or escalates;
+- decides architecture, records findings in `docs/` and reports to [USER].
 
-Claude **não** escreve o código do produto nem faz a investigação de RE "na mão" quando um worker pode fazer.
-Exceções (sempre registradas em `docs/pipeline-log.md` com o motivo):
-1. o worker falhou 3 vezes no mesmo cartão: Claude termina, marcando o que aproveitou;
-2. edição trivial (1 a 3 linhas) em que escrever o cartão custa mais que a edição;
-3. a própria infraestrutura de verificação (harness, checkers, scripts de teste do pipeline).
+Claude **does not** write product code or do RE investigation "by hand" when a worker can do it.
+Exceptions (always logged in `docs/pipeline-log.md` with reason):
+1. worker failed 3 times on the same card: Claude finishes, marking what was salvaged;
+2. trivial edit (1 to 3 lines) where writing the card costs more than the edit;
+3. the verification infrastructure itself (harnesses, checkers, pipeline test scripts).
 
-### Qual worker usar
+### Which worker to use
 
-| Tarefa | Ferramenta | Comando |
+| Task | Tool | Command |
 |---|---|---|
-| Investigação de RE em binário (quem chama X, o que faz a função Y, strings, xrefs) | `tools/rea/rea_worker.py` (qwen + REA/Ghidra, contrato verificado em código) | `python tools/rea/rea_worker.py --target 'D:\Dev\REA\lab\targets\<bin>' --question '...' --out 'D:\Dev\REA\lab\reports\<bin>-<tema>.md'` |
-| Gerar um arquivo (script Python, parser de formato, teste, tabela, C/C++) | `tools/workers/local_worker.py` | `python tools/workers/local_worker.py --task work/cards/Wnn-x.md --out <arquivo> --ctx <api.h> --lang python` |
-| Triagem de log / resumo de saída grande | `local_worker.py` com cartão de resumo | idem, `--out work/notes/<x>.md` |
+| RE investigation in binary (who calls X, what function Y does, strings, xrefs) | `tools/rea/rea_worker.py` (qwen + REA/Ghidra, contract verified in code) | `python tools/rea/rea_worker.py --target 'D:\Dev\REA\lab\targets\<bin>' --question '...' --out 'D:\Dev\REA\lab\reports\<bin>-<theme>.md'` |
+| Generate a file (Python script, format parser, test, table, C/C++) | `tools/workers/local_worker.py` | `python tools/workers/local_worker.py --task work/cards/Wnn-x.md --out <file> --ctx <api.h> --lang python` |
+| Triage log / summarize large output | `local_worker.py` with summary card | same, `--out work/notes/<x>.md` |
 
-Rodar sempre pelo `terminal` com `background=true, notify=true`; enquanto isso Claude prepara o próximo cartão.
+Always run via `terminal` with `background=true, notify=true`; while Claude prepares the next card.
 
-**Não usar `delegate_task` (subagente Hermes) como worker.** Testado em 14/10: o qwen com o prompt grande do
-Hermes fez **0 chamadas de ferramenta** e entregou um relatório **inteiramente inventado**. Os harnesses acima
-falam direto com o Ollama, com prompt curto, e recusam saída que não bate com a evidência.
+**Do not use `delegate_task` (subagent Hermes) as worker.** Tested on 10/14: qwen with Hermes' large prompt made **0 tool calls** and delivered a **completely fabricated report**. The harnesses above talk directly to Ollama, with short prompts, and reject output that doesn't match evidence.
 
-## 2. Skills que o Claude deve carregar
+## 2. Skills Claude should load
 
-| Skill | Quando |
+| Skill | When |
 |---|---|
-| `rea-local-lab` | qualquer tarefa com REA/Ghidra ou com o `rea_worker.py` |
-| `local-worker-orchestration` | ao escrever/despachar/verificar cartões; ler `references/worker-cards.md` (como escrever cartões que o qwen acerta) |
-| `local-ai-resource-manager` | antes de subir modelo: cabe na RAM/VRAM? |
-| `systematic-debugging` | bug ou resultado estranho: causa raiz antes de corrigir |
-| `test-driven-development` | código novo de ferramenta: teste/oráculo primeiro |
-| `grounded-citations` | ao escrever achados em `docs/`: toda afirmação com fonte |
-| `blocked-page-recovery` | download/documentação bloqueada |
+| `rea-local-lab` | any task with REA/Ghidra or with the `rea_worker.py` |
+| `local-worker-orchestration` | when writing/dispatching/verifying cards; read `references/worker-cards.md` (how to write cards that qwen gets right) |
+| `local-ai-resource-manager` | before loading a model: does it fit in RAM/VRAM? |
+| `systematic-debugging` | bug or strange result: root cause before fixing |
+| `test-driven-development` | new tool code: test/oracle first |
+| `grounded-citations` | when writing findings in `docs/`: every claim with source |
+| `blocked-page-recovery` | blocked download/documentation |
 
-Se uma skill estiver errada ou faltar uma armadilha descoberta, **corrigir a skill** (`skill_manage patch`) antes de encerrar.
-As skills específicas e versionadas deste workspace ficam em [`.agents/skills/`](.agents/skills/); carregar a
-`SKILL.md` correspondente antes de trabalho de RE ou de recompilação estática.
+If a skill is wrong or a trap is discovered, **correct the skill** (`skill_manage patch`) before finishing.
+The specific and versioned skills for this workspace are in [`.agents/skills/`](.agents/skills/); load the
+corresponding `SKILL.md` before RE or static recompilation work.
 
-## 3. Como escrever um cartão (resumo; o detalhe está em `worker-cards.md`)
-- Arquivo em `work/cards/Wnn-<tema>.md`: objetivo, **API existente** que pode usar (curta), entradas/saídas,
-  **critério de aceite checável por script** (compila, teste passa, contagem, hash, comparação com oráculo).
-- Teste: inclua a **tabela de valores esperados** já calculada. Formato binário: inclua offsets/tamanhos conhecidos e
-  um arquivo de exemplo **do lab** (nunca cole bytes do jogo no cartão versionado).
-- Nada de exemplos literais em cartão criativo (o qwen copia).
-- Retry: `<cartão>-t2.md` com seção "TENTATIVA 2 — REJEITADA" listando cada erro e a resposta correta.
+## 3. How to write a card (summary; details in `worker-cards.md`)
+- File in `work/cards/Wnn-<theme>.md`: objective, **existing API** that can be used (short), inputs/outputs,
+  **checkable acceptance criterion by script** (compiles, test passes, count, hash, oracle comparison).
+- Test: include the **expected values table** already calculated. Binary format: include known offsets/sizes and
+  an example **from the lab** (never paste bytes from the game in a versioned card).
+- No literal examples in creative cards (qwen copies).
+- Retry: `<card>-t2.md` with section "ATTEMPT 2 — REJECTED" listing each error and correct response.
 
-## 4. Verificação (o worker se auto-reporta; Claude nunca confia sem checar)
-- **Gates (`tools/verify/gates.py`) são a única prova aceita.** "Compila", "linka", "boot OK", "fase N concluída"
-  só valem citando um `run_id` de `python tools/verify/gates.py run <dumps|host|link|boot|simd|excl_pair>`, que roda o
-  comando de verdade e grava a evidência em `work/evidence/gates.jsonl` (hashes, exit code, estágio do boot).
-  Ninguém escreve nesse arquivo à mão. Doc que diz ✅/[x]/concluído sem `run_id=...` é barrada no pre-commit.
-- **Proibido (contado como falso):** script que só faz `echo "✅ PASSOU"`; `|| true` em build/run; trocar código real
-  por stub "para compilar"; `rm -rf` em `dumps/`; replace cego em docs; dizer que uma ferramenta "não existe" sem
-  procurar em `D:\Tools`. Falhou? Dizer que falhou, com a saída.
-- **Placar do qwen:** toda afirmação de um agente vira uma linha em `work/evidence/claims.jsonl`:
-  `gates.py claim <gate> --agent qwen --text "<o que ele disse>"` (roda o gate e julga) ou, para turnos de chat
-  já passados, `gates.py note --agent qwen --verdict FALSE --evidence "<prova>"`. `gates.py score -v` = taxa de falsas.
-- Pre-commit: `cp tools/verify/pre-commit .git/hooks/pre-commit` (roda `test_gates.py` + `gates.py lint --staged`).
-- RE: conferir 2 ou 3 afirmações contra `<relatório>.log.jsonl` (saídas reais). Um id real numa afirmação errada passa
-  pelo harness: só a revisão pega. Registrar o veredito em `docs/rea-worker-reviews.md`.
-- Código: compilar/rodar de verdade; teste diferencial contra oráculo sempre que existir (Unicorn, ferramenta de
-  referência, arquivo conhecido). "Compilou" não é "funciona".
-- Nunca reportar "feito/OK" sem a saída que prova. Falhou? Dizer que falhou e por quê.
-- Todo cartão vira uma linha em `docs/pipeline-log.md` (dono, modelo, tentativas, tempo, resultado, motivo).
+## 4. Verification (worker self-reports; Claude never trusts without checking)
+- **Gates (`tools/verify/gates.py`) are the only accepted proof.** "Compiles", "links", "boot OK", "phase N completed"
+  only count if citing a `run_id` of `python tools/verify/gates.py run <dumps|host|link|boot|simd|excl_pair>`, which runs
+  the real command and logs evidence in `work/evidence/gates.jsonl` (hashes, exit code, boot stage).
+  No one writes to this file by hand. Doc that says ✅/[x]/completed without `run_id=...` is blocked in pre-commit.
+- **Prohibited (counted as false):** script that only does `echo "✅ PASSED"`; `|| true` in build/run; replace real code
+  with stub "to compile"; `rm -rf` in `dumps/`; blind replace in docs; say a tool "doesn't exist" without
+  searching in `D:\Tools`. Failed? Say it failed, with output.
+- **qwen score:** every agent claim becomes a line in `work/evidence/claims.jsonl`:
+  `gates.py claim <gate> --agent qwen --text "<what it said>"` (runs the gate and judges) or, for past chat turns,
+  `gates.py note --agent qwen --verdict FALSE --evidence "<proof>"`. `gates.py score -v` = false rate.
+- Pre-commit: `cp tools/verify/pre-commit .git/hooks/pre-commit` (runs `test_gates.py` + `gates.py lint --staged`).
+- RE: verify 2 or 3 claims against `<report>.log.jsonl` (real outputs). A real ID in a wrong claim passes
+  through the harness: only review catches it. Log verdict in `docs/rea-worker-reviews.md`.
+- Code: compile/run for real; differential test against oracle whenever exists (Unicorn, reference tool,
+  known file). "Compiled" is not "works".
+- Never report "done/OK" without proof output. Failed? Say it failed and why.
+- Every card becomes a line in `docs/pipeline-log.md` (owner, model, attempts, time, result, reason).
 
-### 4.1 Regras anti-alucinação (lições de 15/10: 20 de 27 afirmações do qwen eram falsas)
-Valem para o qwen como worker **e** para qualquer modelo local que assuma o chat (fallback do Hermes).
-1. **Modelo local no comando do chat = só observa.** Pode rodar gates, ler logs e escrever notas em
-   `work/notes/`. **Não** cria cartões, **não** despacha subagentes, **não** edita código/roadmap, **não** declara
-   fase concluída. Fase "concluída" só existe com o marco do roadmap provado por `run_id` (M3 = screenshot com o logo).
-2. **O roadmap manda.** Os números de fase são os de `docs/roadmap/README.md`; inventar "fase 4.3/5" de outra coisa
-   é falso. Na dúvida, ler a página da fase antes de agir.
-3. **Caminhos absolutos dentro de `D:\Dev\REA`.** Subagente/worker sem caminho absoluto escreveu no repo do Hospital
-   (`C:\Users\ser_l\RPG\Hospital`). Todo cartão diz o arquivo exato de saída; Claude confere com `git status` nos
-   dois repos.
-4. **Só nomes que existem.** Antes de citar uma função/tipo num cartão, `grep` no runtime ou no log. Funções NVN
-   do jogo vêm de `lab/host-*/nvnmiss.log` (`PVR_NVN_MISSING=1`), não da memória do modelo
-   (`nvnCommandBufferPresent` e `NvnPresentId` não existem).
-5. **Como uma função NVN entra no runtime:** `NVN(nvnNome) { ... }` em `nvn/cmdbuf.c` ou `nvn/objects.c`
-   (macro de `nvn/nvn.h`, argumentos em `A(i)`/`AP(i)`), registrada por nome no `nvnDeviceGetProcAddress`.
-   Função C solta em arquivo novo **não é chamada por ninguém** e nem entra no build (`build_host.sh` lista os
-   arquivos de `nvn/` um a um).
-6. **Arquivo novo tem que ser usado.** Aceite inclui: entrou no `build_host.sh`/foi referenciado, e uma rodada real
-   mostra o efeito (ex.: `nvn-missing` some do log). "Compila" com arquivo morto conta como falso.
-7. **Executou? Cole a saída.** "Pronto para rodar" exige que o comando tenha rodado nesta máquina (ex.: o exe em janela
-   precisa de `recomp/run_window.cmd` por causa das DLLs do MSYS2).
-8. **Um cartão por vez, numerado do próximo livre de `docs/pipeline-log.md`.** Nada de gerar dezenas de cartões
-   por script com o mesmo texto: cartão sem a API real e sem aceite checável é rejeitado antes de despachar.
+### 4.1 Anti-hallucination rules (lessons from 10/15: 20 of 27 qwen claims were false)
+Apply to qwen as worker **and** any local model that assumes the chat (Hermes fallback).
+1. **Local model in chat command = only observes.** Can run gates, read logs and write notes in
+   `work/notes/`. **Does not** create cards, **does not** dispatch subagents, **does not** edit code/roadmap, **does not** declare
+   phase completed. Phase "completed" only exists with roadmap milestone proven by `run_id` (M3 = screenshot with logo).
+2. **The roadmap rules.** Phase numbers are from `docs/roadmap/README.md`; inventing "phase 4.3/5" of something else
+   is false. When in doubt, read the phase page before acting.
+3. **Absolute paths within `D:\Dev\REA`.** Subagent/worker without absolute path wrote to Hospital repo
+   (`C:\Users\ser_l\RPG\Hospital`). Every card states exact output file; Claude checks with `git status` in both repos.
+4. **Only existing names.** Before citing a function/type in a card, `grep` at runtime or in log. Game NVN
+   functions come from `lab/host-*/nvnmiss.log` (`PVR_NVN_MISSING=1`), not model memory
+   (`nvnCommandBufferPresent` and `NvnPresentId` don't exist).
+5. **How an NVN function enters runtime:** `NVN(nvnName) { ... }` in `nvn/cmdbuf.c` or `nvn/objects.c`
+   (macro from `nvn/nvn.h`, arguments in `A(i)`/`AP(i)`), registered by name in `nvnDeviceGetProcAddress`.
+   Standalone C function in new file **is not called by anyone** and doesn't enter the build (`build_host.sh` lists
+   `nvn/` files one by one).
+6. **New file must be used.** Acceptance includes: entered into `build_host.sh`/referenced, and a real round shows
+   the effect (e.g., `nvn-missing` disappears from log). "Compiles" with dead file counts as false.
+7. **Executed? Paste output.** "Ready to run" requires command to have run on this machine (e.g., exe in window
+   needs `recomp/run_window.cmd` due to MSYS2 DLLs).
+8. **One card at a time, numbered from next free of `docs/pipeline-log.md`.** No generating dozens of cards
+   by script with same text: card without real API and without checkable acceptance is rejected before dispatching.
 
-## 5. Privacidade e parte legal (inegociável)
-- As ROMs/dumps (`roms/*.xci`, `roms/*.nsp`), chaves (`prod.keys`, `title.keys`), `exefs/`, `romfs/`, código gerado e saídas de
-  Ghidra/REA sobre o jogo são **privados**: ficam em pastas ignoradas (`.gitignore`), **nunca** em commit, issue,
-  chat público ou upload.
-- `docs/` pode descrever **como** algo funciona (arquitetura, nomes de sistemas, offsets curtos como referência);
-  **não** pode conter trechos grandes de código decompilado, assets, textos ou modelos do jogo.
-- Chaves só do console do próprio [USER]. Nunca baixar chaves, ROMs ou firmware da internet.
-- Uso pessoal/estudo. Nada é redistribuído.
+## 5. Privacy and legal terms (non-negotiable)
+- ROMs/dumps (`roms/*.xci`, `roms/*.nsp`), keys (`prod.keys`, `title.keys`), `exefs/`, `romfs/`, generated code and outputs from
+  Ghidra/REA about the game are **private**: stay in ignored folders (`.gitignore`), **never** in commit, issue,
+  public chat or upload.
+- `docs/` can describe **how** something works (architecture, system names, short offsets as reference);
+  **not** contain large code snippets, assets, texts or models from the game.
+- Keys only for [USER]'s own console. Never download keys, ROMs or firmware from internet.
+- Personal/study use only. Nothing is redistributed.
 
-## 6. Estrutura do workspace
+## 6. Workspace structure
 
 ```
 D:\Dev\REA\
-├─ CLAUDE.md / AGENTS.md   diretrizes (este arquivo)
-├─ IDEA.md                 objetivo
-├─ docs/                   achados e guias (versionado)
-├─ .agents/skills/         skills versionadas deste workspace
-├─ tools/rea/              rea.sh (CLI enxuta), rea_worker.py (harness de RE)
-├─ tools/workers/          local_worker.py (worker de código)
-├─ work/                   cartões e notas de trabalho (versionado, sem conteúdo do jogo)
-├─ lab/                    alvos, snapshots, relatórios brutos      [ignorado]
-├─ psvrecomp/              nosso projeto de recompilação (o que for nosso é versionado)
-├─ roms/                   ROMs/dumps do Switch                    [PRIVADO, ignorado]
-└─ ref/                                    referências de terceiros  [ignorado]
+├─ CLAUDE.md / AGENTS.md   guidelines (this file)
+├─ IDEA.md                 goal
+├─ docs/                   findings and guides (versioned)
+├─ .agents/skills/         versioned skills for this workspace
+├─ tools/rea/              rea.sh (lean CLI), rea_worker.py (RE harness)
+├─ tools/workers/          local_worker.py (code worker)
+├─ work/                   work cards and notes (versioned, no game content)
+├─ lab/                    targets, snapshots, raw reports      [ignored]
+├─ psvrecomp/              our recompilation project (what is ours is versioned)
+├─ roms/                   Switch ROMs/dumps                    [PRIVATE, ignored]
+└─ ref/                                    third-party references  [ignored]
 ```
-Ferramentas pesadas fora do repo: `D:\Tools` (Ghidra, JDK, MinGW), `D:\msys64`.
+Heavy tools outside repo: `D:\Tools` (Ghidra, JDK, MinGW), `D:\msys64`.
 
-## 7. Recursos da máquina (RTX 3070 Ti 8 GB / 32 GB RAM)
-- `qwen3-coder-64k` usa ~25 GB de RAM com offload: **um modelo por vez**, workers **sequenciais**.
-- Ghidra/REA + qwen ao mesmo tempo é o limite: feche Unity/Chrome pesado antes de lotes grandes.
-- `ollama stop qwen3-coder-64k` ao fim de cada lote.
-- C: tem ~16 GB livres: todo download/cache/instalação vai para o D:.
+## 7. Machine resources (RTX 3070 Ti 8 GB / 32 GB RAM)
+- `qwen3-coder-64k` uses ~25 GB of RAM with offload: **one model at a time**, workers **sequential**.
+- Ghidra/REA + qwen at the same time is the limit: close heavy Unity/Chrome before large batches.
+- `ollama stop qwen3-coder-64k` after each batch.
+- C: has ~16 GB free: all downloads/cache/installations go to D:.
 
-## 8. Ambiente e comandos (detalhes em `docs/ambiente.md`)
-- REA: `bash tools/rea/rea.sh <cmd> '<alvo>'` (saída enxuta; `REA_RAW=1` para envelope completo).
-- MCP `rea` no Hermes: 21 ferramentas filtradas (para o Claude; não para o qwen).
-- Compilação nativa: `export PATH="/d/msys64/ucrt64/bin:/d/msys64/usr/bin:$PATH"` **só no comando**, nunca deixar persistente
-  (quebra o `TMP` do REA).
+## 8. Environment and commands (details in `docs/ambiente.md`)
+- REA: `bash tools/rea/rea.sh <cmd> '<target>'` (lean output; `REA_RAW=1` for full envelope).
+- MCP `rea` in Hermes: 21 filtered tools (for Claude; not for qwen).
+- Native compilation: `export PATH="/d/msys64/ucrt64/bin:/d/msys64/usr/bin:$PATH"` **only in command**, never persist
+  (breaks REA's `TMP`).
 
 ## 9. Git
-- Commits pequenos, mensagem em português no imperativo ("Adiciona parser de TRPAK").
-- Antes de commitar: `git status` e conferir que nada de `lab/`, dump, chave ou saída de Ghidra entrou.
-- Nunca `git add -A` às cegas na raiz.
+- Small commits with English imperative messages ("Add TRPAK parser").
+- Before committing: `git status` and check nothing from `lab/`, dump, key or Ghidra output got in.
+- Never blindly `git add -A` at root.
