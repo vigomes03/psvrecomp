@@ -1,5 +1,14 @@
 # Phase 4: Graphics (NVN → Vulkan)
 
+**Audit (2026-10-17):** M3/M4 historical gate run_id=312d34de1a supports rendered scenes and scene changes,
+not an exhaustive shader corpus or a pixel-perfect title screen. Visual comparisons are separately recorded in the
+pipeline log (2026-10-16). The old black-screen narrative below is historical, not current status.
+4.1: observed NVN inventory exists; full comparison remains open. 4.2/4.3: observed features only.
+4.4: offline full-corpus translation/fuzz/SPIR-V validation remains open.
+4.5: disk-cache code exists (`vulkan/device.c:222-253`); persistence/invalidation needs a dedicated test.
+4.6: debug hooks exist; full script/RenderDoc workflow is unverified. 4.7: VRAM mirrors exist; full 8 GB budget and
+resource lifetime validation remain open. Keep these composite tasks unchecked.
+
 **Goal:** a correct first frame and then the whole game rendering in Vulkan on the RTX 3070 Ti.
 It is the biggest phase: in LAS it is ~14,500 lines (`runtime/nvn/`).
 
@@ -20,7 +29,7 @@ shaderc; Vulkan backend (`vulkan/exec.c`, `device.c`, `textures.c`, `shaders.c`)
 - [ ] 4.6 🤖 Diagnostic tools: `PVR_DEBUG_FRAME` (draw list per frame), `passes.py`, RenderDoc capture.
 - [ ] 4.7 🧠 VRAM: 8 GB. Measure usage; texture streaming; free orphaned resources.
 
-## Status on 10/15 (audited by Claude)
+## Historical investigation on 10/15 (not current status; see the audit above)
 - 🟡 LAS's Vulkan backend ported (`nvn/vulkan`, `nvn/maxwell`, `astc`, `texpatch`, `output_scale`, SMAA, SDL3) and
   wired into `build_host.sh <dir> vulkan`; the headless (null) build still passes (gate host v400 run_id=d4b249f9a9).
 - 🟡 Windowed run: `recomp/run_window.cmd` (puts `D:\msys64\ucrt64\bin` on PATH: SDL3, shaderc, libstdc++).

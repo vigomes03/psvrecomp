@@ -1,8 +1,15 @@
 @echo off
 setlocal EnableExtensions DisableDelayedExpansion
-cd /d "%~dp0"
+chcp 65001 >nul
+cd /d "%~dp0.." || exit /b 1
 
 if /i "%~1"=="--help" goto :help
+
+set "PYTHON=psvrecomp\recomp\venv\Scripts\python.exe"
+if not exist "%PYTHON%" (
+  echo ERROR: recompilation Python environment not found: %PYTHON%.
+  exit /b 1
+)
 
 set "UPDATE=roms\Pokémon Violet Update V4.0.0.nsp"
 set "KEYS=keys\game.keys"
@@ -31,7 +38,7 @@ if not exist "%HACTOOLNET%" (
   exit /b 1
 )
 if not exist "%BASE%\" (
-  echo ERROR: extract the base ROM first with extract_base.cmd.
+  echo ERROR: extract the base ROM first with scripts\extract_base.cmd.
   exit /b 1
 )
 if exist "%UPDATEOUT%\" (
@@ -80,7 +87,10 @@ echo [3/4] Applying the update to RomFS with hactoolnet...
 if errorlevel 1 goto :extract_failed
 
 echo [4/4] Validating extracted NSOs...
-for %%F in ("%V400%\exefs\*.nso") do python psvrecomp\recomp\nso_verify.py "%%~fF" || goto :verify_failed
+for %%F in (main sdk subsdk0) do (
+  if not exist "%V400%\exefs\%%F" goto :verify_failed
+  "%PYTHON%" psvrecomp\recomp\nso_verify.py "%V400%\exefs\%%F" || goto :verify_failed
+)
 
 set "TITLEKEY="
 del "%LOG%" >nul 2>&1
@@ -100,7 +110,7 @@ echo ERROR: NSO verification failed. The extraction was kept for local investiga
 exit /b 1
 
 :help
-echo Usage: extract_update_v400.cmd
+echo Usage: scripts\extract_update_v400.cmd
 echo Extracts roms\Pokémon Violet Update V4.0.0.nsp into dumps\update and dumps\v400.
 echo Requires an extracted base, keys\game.keys, hactool, and hactoolnet with .NET 8 x86.
 exit /b 0

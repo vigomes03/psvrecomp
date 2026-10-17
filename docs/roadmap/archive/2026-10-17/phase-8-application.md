@@ -1,5 +1,11 @@
 # Phase 8: The application
 
+**Audit (2026-10-17):** M7 remains partial.
+8.2 has code and recorded run_auto/manual observations (pipeline log, 2026-10-16), but no dedicated menu gate;
+physical controller navigation and the full settings matrix remain unverified. Its checkbox stays open.
+8.1 launcher is pending; 8.3 is deferred by [USER]; 8.4 and 8.6-8.8 are future proposals, not core-runtime blockers.
+8.5 remains partial: exposed options do not establish visual/performance correctness.
+
 **Goal:** turn "the game running" into an application of our own, like LAS Recomp is for Zelda.
 
 **In Zelda:** start screen (ImGui) with file setup and code build **on the player's machine**; F1 overlay
@@ -9,7 +15,7 @@ controls; save editor; tracker; randomizer.
 ## Tasks
 - [ ] 8.1 🤖 Launcher: pick the dump folder (base + update), validate build ids, generate/compile the code (with
   a progress bar, like LAS's `gamebuild.c`), settings.
-- [x] 8.2 🤖 Overlay menu (F1 / Esc; controller: Home or Back+Start), in English like LAS: tabs Controls (layout),
+- [ ] 8.2 **Partial; menu code/observations exist, full acceptance pending.** 🤖 Overlay menu (F1 / Esc; controller: Home or Back+Start), in English like LAS: tabs Controls (layout),
   Video (fullscreen, monitor, VSync, FPS, internal resolution, upscaler, SMAA), Audio (volume), Quit. `runtime/ui/menu.cpp`
   (from `menu.mm`), LAS's `option_rows.cpp`/`osk.cpp`, Dear ImGui in `third_party/imgui`. Test: `PVR_MENU_KEYS=<frame>:<key>,...`
   + `LARECOMP_WINDOW_SHOT`. Target FPS stays at 30 ([USER]'s decision 10/16). **Safe start:** if the process dies during

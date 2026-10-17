@@ -38,20 +38,20 @@ python tools/verify/gates.py run host --version v400
   log `lab/host-vk/<name>.log`, frames with `LARECOMP_SCREENSHOT_EVERY/FROM`.
 
 ## Extract your own Switch content
-- At the workspace root, `extract_base.cmd` extracts `roms\Pokémon Violet.xci` into `dumps\base\`.
-- Then, `extract_update_v400.cmd` applies `roms\Pokémon Violet Update V4.0.0.nsp` to the base and writes
+- From the workspace root, `scripts\extract_base.cmd` extracts `roms\Pokémon Violet.xci` into `dumps\base\`.
+- Then, `scripts\extract_update_v400.cmd` applies `roms\Pokémon Violet Update V4.0.0.nsp` to the base and writes
   `dumps\v400\`. It uses `hactool` for ExeFS and `hactoolnet` for the BKTR update RomFS.
 - Both scripts refuse to overwrite existing dumps, require `keys\game.keys`, and do not print logs that may contain key
   data. ROMs, keys, dumps, and extraction logs remain ignored by Git.
 
-## Root shortcuts
+## Shortcuts in scripts/
 | Script | Purpose |
 |---|---|
-| `extract_base.cmd` | Extract the base XCI into `dumps\base\`. |
-| `extract_update_v400.cmd` | Extract the v4.0.0 NSP and apply it to produce `dumps\v400\`. |
-| `recompile_v400.cmd` | Generate C and compile all v4.0.0 modules into `lab\gen-v400\`. This is CPU and disk intensive. |
-| `build_and_test_v400.cmd` | Build an isolated Vulkan host, link `pvgame.dll`, and run a 30-second boot test in `lab\host-test-v400\`. |
-| `launch_game.cmd` | Start the manual-play launcher. |
+| `scripts\extract_base.cmd` | Extract the base XCI into `dumps\base\`. |
+| `scripts\extract_update_v400.cmd` | Extract the v4.0.0 NSP and apply it to produce `dumps\v400\`. |
+| `scripts\recompile_v400.cmd` | Generate C and compile all v4.0.0 modules into `lab\gen-v400\`. This is CPU and disk intensive. |
+| `scripts\build_and_test_v400.cmd` | Build an isolated Vulkan host, link `pvgame.dll`, and run a 30-second boot test in `lab\host-test-v400\`. |
+| `scripts\launch_game.cmd` | Start the manual-play launcher. |
 
 ## Diagnostic tools (environment variables, all off by default)
 | Variable | What it does |

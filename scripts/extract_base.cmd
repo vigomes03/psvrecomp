@@ -1,6 +1,7 @@
 @echo off
 setlocal EnableExtensions DisableDelayedExpansion
-cd /d "%~dp0"
+chcp 65001 >nul
+cd /d "%~dp0.." || exit /b 1
 
 if /i "%~1"=="--help" goto :help
 
@@ -55,7 +56,7 @@ echo Do not share this file: extraction tools can record sensitive key data.
 exit /b 1
 
 :help
-echo Usage: extract_base.cmd
+echo Usage: scripts\extract_base.cmd
 echo Extracts roms\Pokémon Violet.xci into dumps\base\.
 echo Requires keys\game.keys and D:\Tools\hactool\hactool.exe.
 exit /b 0

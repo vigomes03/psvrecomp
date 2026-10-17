@@ -5,6 +5,10 @@ import sys
 
 import lz4.block
 
+if len(sys.argv) < 2:
+    sys.exit('Usage: nso_verify.py <NSO> [NSO ...]')
+
+failed = False
 for p in sys.argv[1:]:
     d = open(p, 'rb').read()
     assert d[:4] == b'NSO0', p
@@ -19,3 +23,6 @@ for p in sys.argv[1:]:
         want = d[0xA0 + 0x20 * i: 0xC0 + 0x20 * i]
         res.append('ok' if hashlib.sha256(raw).digest() == want else 'BAD')
     print(p.replace('\\', '/').split('/')[-3:], 'flags', hex(flags), 'text/ro/data sha256:', res)
+    failed |= 'BAD' in res
+
+sys.exit(1 if failed else 0)

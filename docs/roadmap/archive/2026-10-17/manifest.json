@@ -1,0 +1,90 @@
+{
+  "snapshot": "2026-10-17",
+  "purpose": "Superseded roadmap and evidence audit; exact pre-rewrite bytes",
+  "files": [
+    {
+      "original": "docs/roadmap/phase-0-acquisition.md",
+      "file": "phase-0-acquisition.md",
+      "bytes": 3461,
+      "sha256": "d5fb7027674e65dca72d343ad60e227b7fb16914c2f6b3444183fdaf7069cc69"
+    },
+    {
+      "original": "docs/roadmap/phase-0-findings.md",
+      "file": "phase-0-findings.md",
+      "bytes": 3844,
+      "sha256": "a7b208e1570b91d455ec63b53fff1b8c5fb26ef887c45857879a0a0077d49831"
+    },
+    {
+      "original": "docs/roadmap/phase-1-recompiler.md",
+      "file": "phase-1-recompiler.md",
+      "bytes": 5769,
+      "sha256": "38217df9e4bd738ad79c5e2f8d625d5d104a802acac3f98902e4fb9c81f3261a"
+    },
+    {
+      "original": "docs/roadmap/phase-10-custom-map.md",
+      "file": "phase-10-custom-map.md",
+      "bytes": 7916,
+      "sha256": "91713b24c277814c1411312414180fb85c24e8ad6fff9244a15de016429f791c"
+    },
+    {
+      "original": "docs/roadmap/phase-2-runtime-boot.md",
+      "file": "phase-2-runtime-boot.md",
+      "bytes": 6589,
+      "sha256": "110fbce6391d271c0c0af069bd2e8f30f1ed7afa97f77e3d1d8ce9b3586a9507"
+    },
+    {
+      "original": "docs/roadmap/phase-3-files.md",
+      "file": "phase-3-files.md",
+      "bytes": 2432,
+      "sha256": "70851796a76c1c1a15c842e1e6fba2557b451bb80338d0d8a7032265c4ff6776"
+    },
+    {
+      "original": "docs/roadmap/phase-4-graphics.md",
+      "file": "phase-4-graphics.md",
+      "bytes": 7688,
+      "sha256": "246a41920b0de15259f53e13210be0ed1dddd46bc9a7983c553d2190dd4a2b48"
+    },
+    {
+      "original": "docs/roadmap/phase-5-systems.md",
+      "file": "phase-5-systems.md",
+      "bytes": 2507,
+      "sha256": "4d717648c4d88bb59f25ff566c0bd8e7662713adce22be409d034a3a718017b6"
+    },
+    {
+      "original": "docs/roadmap/phase-6-playable.md",
+      "file": "phase-6-playable.md",
+      "bytes": 3040,
+      "sha256": "b8a2ecc84c19d2d45bae67d8249fcbf7d98d91586a6f8b991bd8bb63e8bcafb2"
+    },
+    {
+      "original": "docs/roadmap/phase-7-re-tools.md",
+      "file": "phase-7-re-tools.md",
+      "bytes": 2728,
+      "sha256": "914850e57043bfb7cdd1ae476d0c1af23dcf5a07793036509cc3b844ea365001"
+    },
+    {
+      "original": "docs/roadmap/phase-8-application.md",
+      "file": "phase-8-application.md",
+      "bytes": 2612,
+      "sha256": "01405bb9796b2a5c10ec0d7cf9e56b368688723977f150e132fa635db929df41"
+    },
+    {
+      "original": "docs/roadmap/phase-9-aaa-study.md",
+      "file": "phase-9-aaa-study.md",
+      "bytes": 2248,
+      "sha256": "e82f644ad0fb345f4cf3c111d4417f1da1cc14723f2ee203cea00db65bbec6c3"
+    },
+    {
+      "original": "docs/roadmap/README.md",
+      "file": "README.md",
+      "bytes": 13235,
+      "sha256": "4f48156337e24e354e86ccf0ec3e35c24353130bcbedd7edf683257929bc9d2a"
+    },
+    {
+      "original": "docs/roadmap/status-audit-2026-10-17.md",
+      "file": "status-audit-2026-10-17.md",
+      "bytes": 11814,
+      "sha256": "211520ccb710cf4551d8c6062ea4bce63ff144c77449958c18b3c006c8954457"
+    }
+  ]
+}

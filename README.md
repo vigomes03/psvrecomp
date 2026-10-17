@@ -25,12 +25,14 @@ Why the project exists and what success looks like: [IDEA.md](IDEA.md).
 | App | SDL3 window, ImGui overlay menu, `psvrecomp.ini` settings, crash report, safe start. | `psvrecomp/runtime/ui/` |
 
 ## Status
-Tracked phase by phase in the [roadmap](docs/roadmap/README.md); every milestone there cites the `run_id` of the gate
-that proved it. Summary at the last review (2026-10-16):
-- M0-M2: dump extracted, everything recompiles and links, headless boot on both versions (v400 run_id=7adc0390c2).
-- M3-M6: title screen, new game, and 10 minutes in the open world at ~30 fps (gate window run_id=c6a80b10d8).
-- M7 (the app): overlay menu and settings work; the launcher screen is still missing.
-- Known issues (rare crashes, open questions) are listed in the roadmap.
+The [active roadmap](docs/roadmap/README.md) separates established historical results, observed features and
+open acceptance tasks. Revision: 2026-10-17; no runtime experiment was rerun for this documentation rewrite.
+- Historical v4.0.0 headless frame/time-limit evidence: run_id=7adc0390c2.
+- Historical 600-second copied-save open-world route: run_id=c6a80b10d8; not full-game stability.
+- The latest recorded headless host build failed: run_id=648a2fa61b; fresh baseline is the next task.
+- Overlay/ini/safe-start observations exist; launcher and full app acceptance remain open.
+- The focused study path is archive/scene tracing followed by a reversible custom-platform experiment.
+- The old roadmap is [archived](docs/roadmap/archive/README.md), not another active work queue.
 
 Primary target is game version **4.0.0** (base 1.0.0 + update). 1.0.0 is kept as a comparison build.
 
@@ -52,15 +54,16 @@ Primary target is game version **4.0.0** (base 1.0.0 + update). 1.0.0 is kept as
 Full environment notes, verified versions, and known traps: [docs/environment.md](docs/environment.md).
 
 ## Quick start
-All shortcuts live at the repository root and refuse to overwrite existing output.
+Shortcuts live in `scripts/` and resolve project paths from the repository root, even when launched elsewhere.
+Extraction scripts retain their existing overwrite guards. Recompilation asks for confirmation unless `--yes` is given.
 
 | Step | Command | Result |
 |---|---|---|
-| 1. Extract the base game | `extract_base.cmd` | `dumps\base\` (secure partition, ExeFS, RomFS) |
-| 2. Apply the 4.0.0 update | `extract_update_v400.cmd` | `dumps\v400\` |
-| 3. Recompile | `recompile_v400.cmd` (add `--yes` to skip the prompt) | generated C and objects in `lab\gen-v400\` |
-| 4. Build and smoke test | `build_and_test_v400.cmd` | Vulkan host + `pvgame.dll`, 30-second automated boot in `lab\host-test-v400\` |
-| 5. Play | `launch_game.cmd [host_dir] [version] [seconds] [monitor]` | game window; log in `<host_dir>\window.log` |
+| 1. Extract the base game | `scripts\extract_base.cmd` | `dumps\base\` (secure partition, ExeFS, RomFS) |
+| 2. Apply the 4.0.0 update | `scripts\extract_update_v400.cmd` | `dumps\v400\` |
+| 3. Recompile | `scripts\recompile_v400.cmd` (add `--yes` to skip the prompt) | generated C and objects in `lab\gen-v400\` |
+| 4. Build and smoke test | `scripts\build_and_test_v400.cmd` | Vulkan host + `pvgame.dll`, 30-second automated boot in `lab\host-test-v400\` |
+| 5. Play | `scripts\launch_game.cmd [host_dir] [version] [seconds] [monitor]` | game window; log in `<host_dir>\window.log` |
 
 The extraction scripts never print logs that may contain key material.
 
@@ -103,7 +106,7 @@ Diagnostic environment variables (`PVR_*`, `LARECOMP_*`) are documented in
 D:\Dev\REA\
 ├─ README.md / IDEA.md        this file / project goals
 ├─ CLAUDE.md / AGENTS.md      rules for Claude and every other agent
-├─ *.cmd                      root shortcuts (extract, recompile, build+test, launch)
+├─ scripts/                   CMD shortcuts (extract, recompile, build+test, launch)
 ├─ psvrecomp/                 the recompiler (recomp/) and the native runtime (runtime/)
 ├─ tools/rea/                 reverse engineering helpers (REA/Ghidra harness, crash and profiling reports)
 ├─ tools/verify/              gates.py (evidence), run_auto.sh, tests, pre-commit hook
@@ -129,7 +132,7 @@ D:\Dev\REA\
 | Document | Content |
 |---|---|
 | [docs/README.md](docs/README.md) | Index of findings and guides |
-| [docs/roadmap/README.md](docs/roadmap/README.md) | Phases 0-9, milestones, known issues, strategy |
+| [docs/roadmap/README.md](docs/roadmap/README.md) | Active baseline/app/scene/platform tracks, evidence, backlog and old-phase mapping |
 | [docs/lasrecomp-study.md](docs/lasrecomp-study.md) | How LAS Recomp was made and what we reuse |
 | [docs/rea-local-agent.md](docs/rea-local-agent.md) | REA/Ghidra + local model setup |
 | [psvrecomp/README.md](psvrecomp/README.md) | Runtime details and diagnostic variables |

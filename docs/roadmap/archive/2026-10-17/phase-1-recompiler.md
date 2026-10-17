@@ -1,5 +1,13 @@
 # Phase 1: ARM64 → C recompiler
 
+**Audit (2026-10-17):** historical DLL milestone and differential coverage are distinct.
+The SIMD evidence run_id=782956f97a covers 20,000 encodings / 159,968 cases, not every encoding's semantics.
+Item 1.4 and the exhaustive part of 1.5 remain open; 1.7 still needs a version-tagged fallback report.
+The deterministic first-battle dispatch failure was addressed (pipeline log, 2026-10-15, commit `28c44eb`);
+it is not the remaining rare loading crash. Do not list it as the current priority.
+Gate run_id=990a33212b loaded a DLL but stopped at `init_sdk` with an exception; it is not proof of a clean boot
+or the claimed 271,027-function count. Later boot evidence: run_id=7adc0390c2, 233,121 functions for v4.0.0.
+
 **Goal:** turn `main` + `sdk` (+ `subsdk*`) into C that compiles into a DLL, with semantics proven by
 differential tests.
 
@@ -8,6 +16,8 @@ differential tests.
 chunks of ~1,500 functions → `clang -O1`. Tests: `test_lift.py`, `test_simd.py`.
 
 ## Tasks
+
+- [x] 1.5a SIMD semantic sample: 20,000 encodings, 159,968 cases, zero divergences (run_id=782956f97a). This is a subtask, not closure of exhaustive 1.5.
 - [x] 1.1 🧠 (10/14, local commit; test_simd 74,950 cases 0 failures; rename revalidated by `run_id=782956f97a`) Create `psvrecomp/` as a **local fork** of `LASRecomp-main/tools` + `runtime/cpu.h`, `simd*.h`
   (MIT header preserved). Rename `LARECOMP_*` → `PVR_*`, `lasgame` → `pvgame`.
 - [x] 1.2 🧠 (10/14: `layout.py` + `pvgame.h`/`pvgame_entry.c`; gen.py already generated per module) Generalize `gen.py` to **N modules** (main, sdk, subsdk0..n) with load bases from npdm/rtld,
@@ -19,10 +29,10 @@ chunks of ~1,500 functions → `clang -O1`. Tests: `test_lift.py`, `test_simd.py
 - [x] 1.6 🧠 (10/14, see the measurement below; full `main` linked in run_id=990a33212b) Scale: generate 100% of `main`; measure time, C size, and compile time. If it does not fit:
   parallelize `gen.py` (multiprocessing per function range) and `make -j` with a RAM limit.
 - [ ] 1.7 🤖 Jump table report: resolved / "all labels" fallback / dispatch `br`. Target: fallback < 1%.
-- [x] 1.8 🧠 Empty `patches.py`, with the mechanism ready (a patch that checks the original word).
+- [ ] 1.8 🧠 Patch mechanism: original-word guard still needs a specific test; historical setup alone does not verify it.
 
-## Status on 10/15 (review with [USER])
-- 🔴 **1.7 became priority 1:** the 1st battle closes the game with `FATAL: no function at 7000cedb00 (lr=7000cedadc)`
+## Historical status on 10/15 (superseded by the audit above)
+- Historical, no longer current: **1.7 became priority 1:** the 1st battle closes the game with `FATAL: no function at 7000cedb00 (lr=7000cedadc)`
   (`lab/host-vk/crash_batalha_20261015.log`): an indirect jump to an address the generator did not emit as a function.
   Path: find the source of the jump (table, function pointer, vtable) and include the target in function discovery.
 

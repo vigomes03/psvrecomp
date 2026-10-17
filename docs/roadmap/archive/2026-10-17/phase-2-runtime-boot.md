@@ -1,5 +1,11 @@
 # Phase 2: Minimal runtime and headless boot
 
+**Audit (2026-10-17):** M2 is historical evidence, not a claim that every kernel/service task is closed
+(run_id=7adc0390c2 and run_id=db35401e31). Items 2.3/2.4 cover observed paths only; 2.5 lacks the requested
+standalone stress test and FIFO ordering. Item 2.7's Eden comparison is still open.
+**Revalidation needed:** latest recorded headless host build failed: run_id=648a2fa61b,
+`audio.c:943`, undeclared `SDL_GetCurrentAudioDriver`. No build was rerun during this documentation audit.
+
 **Goal:** the recompiled game initializes and reaches the main loop **without graphics and without audio** (the NVN and
 audio calls become stubs that log and answer "ok").
 
@@ -24,7 +30,7 @@ audio calls become stubs that log and answer "ok").
   Fixed on 10/14, all inherited from the LAS kernel and different from Horizon:
   (a) on timeout, `WaitProcessWideKeyAtomic` does NOT reacquire the mutex (nn::os/libnx reacquires it);
   (b) `block_current` overwrote a wake that arrived at the same time with a timeout; (c) mutex/condvar consumed the
-  `CancelSynchronization` meant for the next `WaitSynchronization`. **Still open:** the boot hangs
+  `CancelSynchronization` meant for the next `WaitSynchronization`. **Historical issue (addressed by the later W09/W10 record below):** the boot hangs
   intermittently between 16 and 512 frames, on both versions; the main thread sits in `WaitAny` with 0 handles.
   To investigate, use `PVR_DUMP_THREADS=1`.
   **Solved on 10/14 (qwen, cards with references):**
@@ -39,7 +45,7 @@ audio calls become stubs that log and answer "ok").
   v400 run_id=e796f17e2a (`frame_presented`).
 - [ ] 2.7 🤖 Structured boot log: sequence of SVCs/IPC; compare with the log of Eden running the same dump.
 
-## Status (10/14, end of day)
+## Historical status (10/14; see later M2 evidence and the audit above)
 On both versions the boot gets to present frames through the null NVN backend: base `present #64` (run_id=6c576b773b) and v400
 `frame_presented` (run_id=e796f17e2a). The stopping point varies from 16 to 512 frames (see 2.5).
 What it took:

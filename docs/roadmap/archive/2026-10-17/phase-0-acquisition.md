@@ -1,5 +1,10 @@
 # Phase 0: Acquisition and Recognition
 
+**Audit (2026-10-17):** extraction milestone retained from run_id=131ff828b2 (v4.0.0 only).
+Inventory is partly documented in [findings](phase-0-findings.md); unchecked research items below are not implied by M0.
+Use `dumps/v400/` for the patched target, not the proposed `dumps/update/` path.
+Eden visual comparisons are recorded in `../pipeline-log.md` (2026-10-16); a reproducible SVC/IPC oracle comparison remains open.
+
 **Objective:** have the game's code and data extracted (base + update) and know **what we're dealing with**
 before writing a line of the recompiler. This phase decides the scale of everything else.
 
@@ -13,10 +18,10 @@ performs the function and instruction census.
 - [ ] `hactool` on XCI → `secure` partition → identify the Program NCA (base 1.0.0)
 - [ ] Extract `exefs` (main, sdk, subsdk*, rtld, main.npdm) → `dumps/base/exefs/`
 - [ ] Extract `romfs` → `dumps/base/romfs/`
-- [ ] Dump the **update** (NSP from [USER]): apply the patch (BKTR) with hactool `--basenca` → `dumps/update/`
+- [x] Patched v4.0.0 extraction is present in `dumps/v400/` (run_id=131ff828b2); hactoolnet was used after hactool rejected the patch. This gate checks pinned exefs and nonempty romfs, not complete integrity.
 - [ ] Note: game version, Title ID, **build id** of each NSO, SDK version (string `NintendoSdk_*` in the NSO footer)
 
-**Decision:** recompile **only one version** (probably the last of the update), because addresses, patches, and hooks are per build id.
+**Decision:** v4.0.0 is the active target; v1.0.0 is a comparison build. Addresses, patches and hooks are per build id.
 
 ### 0.2 Executable Inventory 🤖 (script cards) + 🧠 review
 - [ ] Run `nso.py` from LAS on each NSO: size of `.text/.rodata/.data/.bss`, `MOD0`, imports/exports

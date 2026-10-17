@@ -1,5 +1,13 @@
 # Phase 10: Custom map with a platform (exploratory)
 
+**Audit (2026-10-17):** planning only; every implementation checkbox remains open.
+First target is replacement of a small area, not a standalone map independent of original resources.
+All strategies require experiments: `fsp-srv` exposes the outer romfs package, not necessarily inner resource hashes.
+A RomFS override does not automatically replace a resource inside `data.trpfs`; interception may need the archive
+reader or package/index rebuilding. Collision format and scene registration are unknown.
+No evidence links the recorded hash-table crash to map ids. Integrity checks may also exist inside the package;
+filesystem interception does not by itself bypass them. Proposed hook names below are not existing APIs.
+
 **Goal:** make the game load an area of our own (at minimum a flat platform with collision and a spawn point),
 without depending on an original map. This is personal, local study on our own dump (same rules as phase 9:
 nothing from the game goes into git, and the notes are **descriptions**, without copying assets or decompiled code).
