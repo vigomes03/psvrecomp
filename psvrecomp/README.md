@@ -37,12 +37,12 @@ python tools/verify/gates.py run host --version v400
 - **Pipeline (Claude):** `bash tools/verify/run_auto.sh <segundos> <nome> [VAR=valor ...]` — entrada automática,
   log `lab/host-vk/<nome>.log`, frames com `LARECOMP_SCREENSHOT_EVERY/FROM`.
 
-## Extrair conteúdo próprio do Switch
-- Na raiz do workspace, `extrair_base.cmd` extrai `roms\Pokémon Violet.xci` para `dumps\base\`.
-- Depois, `extrair_update_v400.cmd` aplica `roms\Pokémon Violet Update V4.0.0.nsp` sobre a base e grava em
-  `dumps\v400\`. Ele usa `hactool` para o ExeFS e `hactoolnet` para o RomFS do update BKTR.
-- Os dois scripts recusam sobrescrever dumps existentes, requerem `keys\game.keys` e não exibem logs que possam conter
-  dados de chaves. ROMs, chaves, dumps e logs de extração continuam ignorados pelo Git.
+## Extract your own Switch content
+- At the workspace root, `extract_base.cmd` extracts `roms\Pokémon Violet.xci` into `dumps\base\`.
+- Then, `extract_update_v400.cmd` applies `roms\Pokémon Violet Update V4.0.0.nsp` to the base and writes
+  `dumps\v400\`. It uses `hactool` for ExeFS and `hactoolnet` for the BKTR update RomFS.
+- Both scripts refuse to overwrite existing dumps, require `keys\game.keys`, and do not print logs that may contain key
+  data. ROMs, keys, dumps, and extraction logs remain ignored by Git.
 
 ## Ferramentas de diagnóstico (variáveis de ambiente, todas desligadas por padrão)
 | Variável | O que faz |
