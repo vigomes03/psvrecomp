@@ -7,7 +7,7 @@ EXEFS=$1; OUT=$2; JOBS=${3:-10}
 cd "$(dirname "$0")"
 PY=venv/Scripts/python.exe
 WOUT=$(cygpath -m "$OUT"); WEX=$(cygpath -m "$EXEFS")
-RT="D:/Dev/REA/Pokemon Decompile/runtime"
+RT="D:/Dev/REA/psvrecomp/runtime"
 export PATH="/d/msys64/ucrt64/bin:$PATH"
 export TMP="$(cygpath -w "$LOCALAPPDATA")\\Temp" TEMP="$(cygpath -w "$LOCALAPPDATA")\\Temp"
 "$PY" layout.py "$WEX" > "$OUT/layout.txt"

@@ -1,4 +1,4 @@
-// Excerpts of Pokemon Decompile/runtime/nvn/maxwell/translate.c (registers are GLSL uint r0..r254)
+// Excerpts of psvrecomp/runtime/nvn/maxwell/translate.c (registers are GLSL uint r0..r254)
 #define RZ 255
 enum { TEXTYPE_1D, TEXTYPE_2D, TEXTYPE_3D, TEXTYPE_CUBE, TEXTYPE_2D_ARRAY, TEXTYPE_CUBE_ARRAY, TEXTYPE_1D_ARRAY, TEXTYPE_BUFFER, TEXTYPE_2D_MS };
 static uint64_t bits(uint64_t w, int lo, int n) { return (w >> lo) & ((n == 64) ? ~0ull : ((1ull << n) - 1)); }

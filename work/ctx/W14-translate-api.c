@@ -1,4 +1,4 @@
-// Excerpts of Pokemon Decompile/runtime/nvn/maxwell/translate.c (registers are GLSL `uint` variables)
+// Excerpts of psvrecomp/runtime/nvn/maxwell/translate.c (registers are GLSL `uint` variables)
 
 #define RZ 255
 static uint64_t bits(uint64_t w, int lo, int n) { return (w >> lo) & ((n == 64) ? ~0ull : ((1ull << n) - 1)); }

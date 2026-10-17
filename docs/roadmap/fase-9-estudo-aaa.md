@@ -20,5 +20,5 @@ código decompilado ou assets.
 ## Como trabalhamos aqui
 - Pergunta → cartão `rea_worker` (🤖) → revisão (🧠) → nota em `docs/re/<tema>.md` com marcação
   ✅ verificado / 📖 lido / ❓ hipótese e evidência (evidence_id, endereço+build id).
-- Parsers de formato em `Pokemon Decompile/tools/formats/` (🤖 cartões, critério: lê 100% dos arquivos daquele tipo
+- Parsers de formato em `psvrecomp/tools/formats/` (🤖 cartões, critério: lê 100% dos arquivos daquele tipo
   sem erro + teste com arquivo do `lab/`).

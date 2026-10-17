@@ -1,4 +1,4 @@
-# Pokemon Decompile — PSV Recomp (PVRecomp)
+# PSV Recomp
 
 Recompilação estática do Pokémon Violet (v1.0.0 e update v4.0.0, cartucho e console do [USER]), seguindo o processo do
 LAS Recomp (Link's Awakening Switch). O aplicativo se chama **PSV Recomp** (título da janela, `psvrecomp.log`,
@@ -28,7 +28,7 @@ está em `../docs/pipeline-log.md`.
 ## Rodar
 ```bash
 # build do runtime (Vulkan) -> D:/Dev/REA/lab/host-vk/pvhost.exe
-cd "Pokemon Decompile/recomp" && bash build_host.sh /d/Dev/REA/lab/host-vk vulkan
+cd "psvrecomp/recomp" && bash build_host.sh /d/Dev/REA/lab/host-vk vulkan
 # prova de build/boot (única prova aceita, ver CLAUDE.md)
 python tools/verify/gates.py run host --version v400
 ```
@@ -66,7 +66,7 @@ Detalhe de uso e armadilhas: skill `switch-static-recompilation` (referência `v
 
 ## Testes (sem precisar do jogo)
 ```bash
-cd "Pokemon Decompile/recomp"
+cd "psvrecomp/recomp"
 export PATH="/d/msys64/ucrt64/bin:$PATH"   # clang (só neste comando)
 venv/Scripts/python.exe test_simd.py --encodings 400 --cases 30 --seed 1 --jobs 8
 python ../../tools/verify/test_glsl_slice.py

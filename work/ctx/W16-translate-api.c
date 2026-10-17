@@ -1,4 +1,4 @@
-// Excerpts of Pokemon Decompile/runtime/nvn/maxwell/translate.c (registers are GLSL uint r0..r254)
+// Excerpts of psvrecomp/runtime/nvn/maxwell/translate.c (registers are GLSL uint r0..r254)
 #define RZ 255
 #define LMEM_WORDS 256  // local memory per invocation (1 KB)
 #define PT 7

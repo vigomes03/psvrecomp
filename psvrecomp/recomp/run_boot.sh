@@ -5,7 +5,7 @@
 set -u
 G=$(cygpath -m "${1:?gen dir}"); H=$(cygpath -m "${2:?host dir}"); SECS=${3:-60}; VER=${4:-base}
 EXEFS=D:/Dev/REA/dumps/$VER/exefs; ROMFS=D:/Dev/REA/dumps/$VER/romfs
-P="D:/Dev/REA/Pokemon Decompile"
+P="D:/Dev/REA/psvrecomp"
 export PATH="/d/msys64/ucrt64/bin:$PATH"
 export TMP="$(cygpath -w "$LOCALAPPDATA")\\Temp" TEMP="$(cygpath -w "$LOCALAPPDATA")\\Temp"
 "$P/recomp/venv/Scripts/python.exe" "$P/recomp/layout.py" "$EXEFS" --header "$H/layout_gen.h" --version "$VER" || exit 1

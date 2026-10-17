@@ -342,12 +342,12 @@ static void style_init(void) {
 static bool find_resource(const char *rel, char *out, size_t n) {
     char exe[1024];
     const char *base = SDL_GetBasePath();  // (ends with a separator)
-    const char *tries[] = {"%s%s", "%s../../Pokemon Decompile/%s", "%s../../../Pokemon Decompile/%s"};
+    const char *tries[] = {"%s%s", "%s../../psvrecomp/%s", "%s../../../psvrecomp/%s"};
     for (const char *t : tries) {
         snprintf(exe, sizeof exe, t, base ? base : "", rel);
         if (FILE *f = fopen(exe, "rb")) { fclose(f); snprintf(out, n, "%s", exe); return true; }
     }
-    snprintf(exe, sizeof exe, "D:/Dev/REA/Pokemon Decompile/%s", rel);  // (the workspace)
+    snprintf(exe, sizeof exe, "D:/Dev/REA/psvrecomp/%s", rel);  // (the workspace)
     if (FILE *f = fopen(exe, "rb")) { fclose(f); snprintf(out, n, "%s", exe); return true; }
     return false;
 }

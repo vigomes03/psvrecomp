@@ -5,7 +5,7 @@
 #   Override with PVR_AUTOPRESS / PVR_INPUT in the environment (e.g. PVR_INPUT=3000:A,6000:STICK_DOWN:300).
 #   Output: lab/host-vk/<tag>.log, frames in lab/host-vk/build/frames (every 100 frames), stats printed.
 #   Retries up to 3x when the run dies (FATAL / access violation: the intermittent Lua panic of v400).
-# Manual play (you at the keyboard / gamepad) is "Pokemon Decompile/recomp/run_window.cmd".
+# Manual play (you at the keyboard / gamepad) is "psvrecomp/recomp/run_window.cmd".
 set -u
 SECS=${1:-240}
 TAG=${2:-auto}

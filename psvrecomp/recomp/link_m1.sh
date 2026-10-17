@@ -4,7 +4,7 @@
 # Usage: link_m1.sh <genfull_dir>   (expects obj/, obj_subsdk0/, obj_sdk/ from compile_chunks.sh)
 set -eu
 G=$1
-P="D:/Dev/REA/Pokemon Decompile"
+P="D:/Dev/REA/psvrecomp"
 export PATH="/d/msys64/ucrt64/bin:$PATH"
 export TMP="$(cygpath -w "$LOCALAPPDATA")\\Temp" TEMP="$(cygpath -w "$LOCALAPPDATA")\\Temp"
 cd "$G"

@@ -20,7 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 EVID = ROOT / "work" / "evidence"
 GATES_LOG, CLAIMS_LOG = EVID / "gates.jsonl", EVID / "claims.jsonl"
-PD = ROOT / "Pokemon Decompile"
+PD = ROOT / "psvrecomp"
 RECOMP = PD / "recomp"
 LAB = ROOT / "lab"
 GENFULL, HOST = LAB / "genfull", LAB / "host"
@@ -219,7 +219,7 @@ def g_boot(g, a):
 
 
 def g_simd(g, a):
-    code, out = sh(f'"{bpath(VENV_PY)}" test_simd.py', cwd=RECOMP, timeout=3600)
+    code, out = sh(ENV_MSYS + f'"{bpath(VENV_PY)}" test_simd.py', cwd=RECOMP, timeout=3600)
     g.out = out
     m = re.search(r"(\d+)\s+fail", out, re.I)
     g.check("test_simd exit 0", code == 0, f"exit {code}")

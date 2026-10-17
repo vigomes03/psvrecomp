@@ -12,7 +12,7 @@
 - [ ] 7.5 🤖 Ganchos `PVR_*` documentados onde são definidos (input roteirizado, save temporário, screenshot no frame N...).
 
 ## Estado em 15/10
-- 🟢 Kit de diagnóstico por variáveis `PVR_*` (lista em `Pokemon Decompile/README.md`), `tools/rea/glsl_slice.py`,
+- 🟢 Kit de diagnóstico por variáveis `PVR_*` (lista em `psvrecomp/README.md`), `tools/rea/glsl_slice.py`,
   `tools/verify/run_auto.sh`, gates.
 - 🔴 **Falta log/aviso de crash:** o jogo fecha sem mensagem. Item: caixa de erro com a causa (`FATAL`) e o log
   copiado com data, mais um resumo do último estado (cena, frame, último `[draw]`/`[svc]`).

@@ -34,7 +34,7 @@ O artefato do npm 6.4.0 **não serve** para este snapshot (`privateBridgeDescrip
 - Variáveis de usuário gravadas com `setx`: `GHIDRA_INSTALL_DIR`, `JAVA_HOME`.
 
 ## Runtime em janela (PSV Recomp, Vulkan) — verificado em 15/10/2026
-- Build: `bash "Pokemon Decompile/recomp/build_host.sh" /d/Dev/REA/lab/host-vk vulkan` (clang/SDL3/shaderc do
+- Build: `bash "psvrecomp/recomp/build_host.sh" /d/Dev/REA/lab/host-vk vulkan` (clang/SDL3/shaderc do
   `D:\msys64\ucrt64`, só dentro do comando). Saída `lab/host-vk/pvhost.exe` + `pvgame.dll`.
 - `recomp/run_window.cmd` põe `D:\msys64\ucrt64\bin` no PATH (DLLs SDL3, shaderc, libstdc++), limpa as variáveis de
   debug e abre a janela no monitor 2 (`PVR_DISPLAY`). `tools/verify/run_auto.sh` é a versão do pipeline.

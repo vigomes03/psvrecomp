@@ -8,7 +8,7 @@ testes diferenciais.
 chunks de ~1.500 funções → `clang -O1`. Testes: `test_lift.py`, `test_simd.py`.
 
 ## Tarefas
-- [x] 1.1 🧠 (14/10, commit local; test_simd 74.950 casos 0 falhas) Criar `Pokemon Decompile/` como **fork local** de `LASRecomp-main/tools` + `runtime/cpu.h`, `simd*.h`
+- [x] 1.1 🧠 (14/10, commit local; test_simd 74.950 casos 0 falhas; renomeação revalidada por `run_id=782956f97a`) Criar `psvrecomp/` como **fork local** de `LASRecomp-main/tools` + `runtime/cpu.h`, `simd*.h`
   (cabeçalho MIT preservado). Renomear `LARECOMP_*` → `PVR_*`, `lasgame` → `pvgame`.
 - [x] 1.2 🧠 (14/10: `layout.py` + `pvgame.h`/`pvgame_entry.c`; o gen.py já gerava por módulo) Generalizar `gen.py` para **N módulos** (main, sdk, subsdk0..n) com bases de carga do npdm/rtld,
   tabelas de função por módulo e `dispatch` com N tabelas.

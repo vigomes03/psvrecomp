@@ -3,7 +3,7 @@
 # Errors -> <obj_dir>/errors.log (one "FAIL <file>" line per failed chunk).
 set -u
 GEN=$1; OBJ=$2; JOBS=${3:-10}
-RT="D:/Dev/REA/Pokemon Decompile/runtime"
+RT="D:/Dev/REA/psvrecomp/runtime"
 export PATH="/d/msys64/ucrt64/bin:$PATH"
 export TMP="$(cygpath -w "$LOCALAPPDATA")\\Temp" TEMP="$(cygpath -w "$LOCALAPPDATA")\\Temp"
 mkdir -p "$OBJ"; : > "$OBJ/errors.log"

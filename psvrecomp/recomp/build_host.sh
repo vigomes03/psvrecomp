@@ -6,7 +6,7 @@
 set -u
 OUT=$(cygpath -m "$1")  # clang is native: no /d/ paths
 BACKEND=${2:-null}
-P="D:/Dev/REA/Pokemon Decompile/runtime"
+P="D:/Dev/REA/psvrecomp/runtime"
 export PATH="/d/msys64/ucrt64/bin:$PATH"
 export TMP="$(cygpath -w "$LOCALAPPDATA")\\Temp" TEMP="$(cygpath -w "$LOCALAPPDATA")\\Temp"
 mkdir -p "$OUT/rt"
@@ -19,7 +19,7 @@ case $BACKEND in
   vulkan) NVN=("${NVN_CORE[@]}" "$P"/nvn/astc.c "$P"/nvn/output_scale.c "$P"/nvn/smaa_data.c
                "$P"/nvn/vulkan/*.c "$P"/nvn/maxwell/*.c)
           FLAGS="$FLAGS -DPVR_VULKAN"
-          INC+=(-I"D:/Dev/REA/Pokemon Decompile/third_party/smaa/Textures")
+          INC+=(-I"D:/Dev/REA/psvrecomp/third_party/smaa/Textures")
           LIBS="$LIBS -lSDL3 -lvulkan-1 -lshaderc_shared" ;;
   *) echo "backend must be null or vulkan"; exit 2 ;;
 esac
@@ -37,7 +37,7 @@ if [ "$BACKEND" = vulkan ]; then  # Vulkan Memory Allocator: header-only C++ (MS
   objs+=("$OUT/rt/vma.o")
   # Overlay menu (phase 8): Dear ImGui + its Vulkan backend, our ui/*.cpp and the glue (LAS: same pieces). ImGui and its
   # backend only rebuild when missing (they never change).
-  IM="D:/Dev/REA/Pokemon Decompile/third_party/imgui"
+  IM="D:/Dev/REA/psvrecomp/third_party/imgui"
   for f in "$IM"/imgui.cpp "$IM"/imgui_draw.cpp "$IM"/imgui_tables.cpp "$IM"/imgui_widgets.cpp "$IM"/backends/imgui_impl_vulkan.cpp; do
     o="$OUT/rt/im_$(basename "$f" .cpp).o"
     [ -f "$o" ] || clang++ -O2 -std=c++17 -w -I"$IM" -c "$f" -o "$o" || fail=1
