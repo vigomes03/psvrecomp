@@ -9,7 +9,10 @@ remapeáveis; editor de save; tracker; randomizer.
 ## Tarefas
 - [ ] 8.1 🤖 Launcher: escolher a pasta do dump (base + update), validar build ids, gerar/compilar o código (com
   barra de progresso, como o `gamebuild.c` do LAS), configurações.
-- [ ] 8.2 🤖 Menu overlay (F1): resolução, FPS-alvo, vsync, escala, controles, áudio.
+- [x] 8.2 🤖 Menu overlay (F1 / Esc; controle: Home ou Back+Start), em inglês como o LAS: abas Controls (layout),
+  Video (tela cheia, monitor, VSync, FPS, resolução interna, upscaler, SMAA), Audio (volume), Quit. `runtime/ui/menu.cpp`
+  (de `menu.mm`), `option_rows.cpp`/`osk.cpp` do LAS, Dear ImGui em `third_party/imgui`. Teste: `PVR_MENU_KEYS=<frame>:<tecla>,...`
+  + `LARECOMP_WINDOW_SHOT`. FPS-alvo fica em 30 (decisão do [USER] 16/10).
 - [ ] 8.3 🧠 **Desbloqueio de FPS** (30 → 60+): achar o limitador de frame e o passo de tempo da simulação
   (fase 7) e corrigir a física/animação dependente de frame.
 - [ ] 8.4 🧠 **Widescreen/ultrawide**: aspecto da câmera + culling + UI ancorada (técnica de `patches.py` do LAS).

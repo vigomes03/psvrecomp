@@ -23,6 +23,8 @@ fi
 export PVR_INPUT
 export LARECOMP_SCREENSHOT_EVERY=${LARECOMP_SCREENSHOT_EVERY:-100} LARECOMP_SCREENSHOT_FROM=${LARECOMP_SCREENSHOT_FROM:-100}
 export PVR_RUN_SECONDS=$SECS
+# Settings: a fresh file per run (build/ is wiped), never the player's psvrecomp.ini next to pvhost.exe
+export LARECOMP_SETTINGS=${LARECOMP_SETTINGS:-build/psvrecomp_auto.ini}
 # Saves: the pipeline NEVER uses lab/host-vk/save ([USER]'s manual-play save). It plays in save_auto, reset before
 # every run from SAVE_SEED=<dir with save_0/...> when given (e.g. SAVE_SEED=D:/Dev/REA/lab/saves/user_antes_batalha_20261015).
 export LARECOMP_SAVE_DIR=${LARECOMP_SAVE_DIR:-D:/Dev/REA/lab/host-vk/save_auto}

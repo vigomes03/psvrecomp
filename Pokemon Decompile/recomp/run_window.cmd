@@ -2,11 +2,12 @@
 rem ===== MANUAL: you play. Double-click, or: run_window.cmd [host_dir] [version] [seconds] [monitor]
 rem   host_dir: build_host.sh <dir> vulkan output that also holds pvgame.dll (default D:\Dev\REA\lab\host-vk)
 rem   version : dumps\<version> (default v400)      seconds: 0 = until the window is closed (default 0)
-rem   monitor : 1, 2, ... (default 2; or set PVR_DISPLAY before). The monitor list is at the top of window.log.
+rem   monitor : 1, 2, ... (default: the menu's Video > Monitor, else 2; or set PVR_DISPLAY before). List: top of window.log.
 rem   No scripted input here (PVR_INPUT / PVR_AUTOPRESS are cleared): keyboard + gamepad only.
 rem   Keyboard: WASD left stick, arrows d-pad, K or Space = A, J = B, I = X, L = Y, Q/E = L/R, 1/3 = ZL/ZR,
 rem             Enter = +, Backspace = -, F/R = stick clicks, numpad 8/4/5/6 = right stick.
 rem   Gamepad (Xbox/PS/Switch Pro, plug in before or during the run): Switch layout by position.
+rem   Menu (settings, quit): F1 or Esc; on a controller Home, or Back + Start.
 rem   The automatic run (Claude's pipeline) is tools\verify\run_auto.sh.
 rem pvhost.exe needs SDL3.dll, libshaderc_shared.dll, libstdc++-6.dll, libwinpthread-1.dll from MSYS2 UCRT64.
 setlocal
@@ -17,7 +18,7 @@ if "%VER%"=="" set "VER=v400"
 set "PVR_RUN_SECONDS=%~3"
 if "%PVR_RUN_SECONDS%"=="" set "PVR_RUN_SECONDS=0"
 if not "%~4"=="" set "PVR_DISPLAY=%~4"
-if not defined PVR_DISPLAY set "PVR_DISPLAY=2"
+if not defined PVR_DISPLAY findstr /r /c:"^display = [1-9]" "%HOSTDIR%\psvrecomp.ini" >nul 2>&1 || set "PVR_DISPLAY=2"
 set "PVR_INPUT="
 set "PVR_AUTOPRESS="
 set "PVR_DBG_FS="

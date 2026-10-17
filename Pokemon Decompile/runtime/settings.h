@@ -25,6 +25,8 @@ typedef struct {
     bool reverb;         // room reverb effect
     bool movie_audio;
     bool show_fps;
+    bool vsync;          // (PVRecomp) FIFO presentation instead of mailbox (nvn/vulkan/device.c present_mode)
+    int display;         // (PVRecomp) monitor the window opens on, 1 = first in SDL's list; 0 = where Windows puts it
     bool dpad_move;      // the d-pad (and arrow keys) move Link like the stick
     bool move_360;       // analog movement in any direction (the game snaps the stick to 8): runtime/hle/qol.c
     bool blur_removal;   // no tilt-shift blur at the top / bottom of the screen

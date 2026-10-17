@@ -18,6 +18,9 @@
 VkG g_vk;
 static SDL_Window *window;
 static _Atomic int g_title_fps10 = -1;  // fps x10 for the window title (-1: not measured yet)
+int g_title_fps10_get(void) { return atomic_load(&g_title_fps10); }  // (the menu's FPS counter)
+static _Atomic bool g_want_swapchain;  // the menu changed VSync: new swapchain at the next frame
+void ui_request_swapchain(void) { atomic_store(&g_want_swapchain, true); }
 static atomic_bool ui_ready;
 static VkDebugUtilsMessengerEXT messenger;
 
@@ -258,8 +261,9 @@ static VkPresentModeKHR present_mode(void) {
     // MAILBOX by default: the game paces itself (vi.c's emulated 60 Hz vsync), and with FIFO every submission
     // queued behind the one waiting for a window image, so the game's fence waits followed the presentation engine:
     // a throttled / captured / busy compositor slowed the whole game (4-21 fps with the GPU mostly idle; mailbox:
-    // 60). No tearing. LARECOMP_VK_PRESENT=fifo|immediate|mailbox to choose.
+    // 60). No tearing. LARECOMP_VK_PRESENT=fifo|immediate|mailbox to choose; else the menu's VSync (on = FIFO).
     const char *e = getenv("LARECOMP_VK_PRESENT");
+    if (!e && g_settings.vsync) e = "fifo";
     VkPresentModeKHR want = !e || !strcmp(e, "mailbox") ? VK_PRESENT_MODE_MAILBOX_KHR
                           : !strcmp(e, "immediate") ? VK_PRESENT_MODE_IMMEDIATE_KHR : VK_PRESENT_MODE_FIFO_KHR;
     uint32_t n = 0;
@@ -354,7 +358,9 @@ bool vk_frame_begin(const float clear[4]) {
     int w, h;
     SDL_GetWindowSizeInPixels(window, &w, &h);
     if (!w || !h) return false;  // minimised
-    if (!g_vk.swapchain || (uint32_t)w != g_vk.sc_extent.width || (uint32_t)h != g_vk.sc_extent.height) recreate_swapchain();
+    if (!g_vk.swapchain || (uint32_t)w != g_vk.sc_extent.width || (uint32_t)h != g_vk.sc_extent.height ||
+        atomic_exchange(&g_want_swapchain, false))
+        recreate_swapchain();
     if (!g_vk.swapchain) return false;
     static int trace = -1;
     if (trace < 0) trace = getenv("LARECOMP_VK_TRACE") != NULL;
@@ -520,6 +526,7 @@ void backend_present(NvnTexture *t) {
         static long menu_at = -1;
         if (menu_at < 0) menu_at = getenv("LARECOMP_MENU_AT") ? atol(getenv("LARECOMP_MENU_AT")) : 0;
         if (menu_at && (long)total_frames + 1 == menu_at) { extern void menu_test_open(void); menu_test_open(); }
+        { extern void menu_test_keys(uint64_t frame); menu_test_keys(total_frames + 1); }
         menu_render((void *)cb, g_vk.sc_extent.width, g_vk.sc_extent.height);
         static long win_shot = -1;
         if (win_shot < 0) win_shot = getenv("LARECOMP_WINDOW_SHOT") ? atol(getenv("LARECOMP_WINDOW_SHOT")) : 0;
@@ -672,11 +679,12 @@ void ui_window_init(void) {
             LOG("[window] monitor %d: %s %dx%d at %d,%d%s\n", i + 1, SDL_GetDisplayName(ds[i]), r.w, r.h, r.x, r.y,
                 ds[i] == SDL_GetPrimaryDisplay() ? " (primary)" : "");
         }
-        const char *want = getenv("PVR_DISPLAY");
-        int k = want ? atoi(want) : 0;
+        const char *want = getenv("PVR_DISPLAY");  // (else the menu's Monitor setting)
+        int k = want ? atoi(want) : g_settings.display;
         if (ds && k >= 1 && k <= nd) {
             SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED_DISPLAY(ds[k - 1]), SDL_WINDOWPOS_CENTERED_DISPLAY(ds[k - 1]));
-            LOG("[window] PVR_DISPLAY=%d -> monitor %d\n", k, k);
+            LOG("[window] %s=%d -> monitor %d\n", want ? "PVR_DISPLAY" : "display", k, k);
+            if (want && !g_settings.display) g_settings.display = k;  // (the menu's Monitor shows where it opened)
         }
         SDL_free(ds);
     }

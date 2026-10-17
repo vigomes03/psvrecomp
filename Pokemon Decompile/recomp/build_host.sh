@@ -35,6 +35,20 @@ done
 if [ "$BACKEND" = vulkan ]; then  # Vulkan Memory Allocator: header-only C++ (MSYS2 vulkan-memory-allocator)
   clang++ -O2 -std=c++17 -w -c "D:/Dev/REA/LASRecomp-main/LASRecomp-main/runtime/nvn/vulkan/vma.cpp" -o "$OUT/rt/vma.o" || fail=1
   objs+=("$OUT/rt/vma.o")
+  # Overlay menu (phase 8): Dear ImGui + its Vulkan backend, our ui/*.cpp and the glue (LAS: same pieces). ImGui and its
+  # backend only rebuild when missing (they never change).
+  IM="D:/Dev/REA/Pokemon Decompile/third_party/imgui"
+  for f in "$IM"/imgui.cpp "$IM"/imgui_draw.cpp "$IM"/imgui_tables.cpp "$IM"/imgui_widgets.cpp "$IM"/backends/imgui_impl_vulkan.cpp; do
+    o="$OUT/rt/im_$(basename "$f" .cpp).o"
+    [ -f "$o" ] || clang++ -O2 -std=c++17 -w -I"$IM" -c "$f" -o "$o" || fail=1
+    objs+=("$o")
+  done
+  for f in "$P"/ui/*.cpp "$P"/nvn/vulkan/*.cpp; do
+    o="$OUT/rt/ui_$(basename "$f" .cpp).o"
+    clang++ -O2 -g -std=c++17 -Wall -Wno-unused-function -DPVR_VULKAN -DWIN32_LEAN_AND_MEAN -DNOMINMAX -I"$IM" -I"$IM/backends" \
+      -I"$P" -I"$P/ui" -I"$P/nvn/vulkan" -c "$f" -o "$o" || fail=1
+    objs+=("$o")
+  done
   LIBS="$LIBS -lstdc++"
 fi
 [ $fail = 0 ] || { echo "compile errors"; exit 1; }

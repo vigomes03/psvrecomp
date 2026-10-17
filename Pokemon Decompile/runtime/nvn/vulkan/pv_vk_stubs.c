@@ -18,12 +18,5 @@ void texpatch_apply(int id, uint32_t lv, uint8_t *blocks, uint32_t w, uint32_t h
 int texpatch_heart_kind(int id) { (void)id; return 0; }
 void texpatch_heart_tint(int kind, float tint[8]) { (void)kind; (void)tint; }  // zeroed tint = none
 
-// ui/menu.h (no in-game menu yet)
-bool menu_handle_event(const SDL_Event *e) { (void)e; return false; }
-bool menu_is_open(void) { return false; }
-void menu_apply_window_requests(void *sdl_window) { (void)sdl_window; }
-void menu_render(void *cmd, uint32_t target_w, uint32_t target_h) { (void)cmd; (void)target_w; (void)target_h; }
-void menu_test_open(void) {}
-
 // paths.h
 void rt_window_icon(SDL_Window *w) { (void)w; }

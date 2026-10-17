@@ -112,6 +112,13 @@ static void recompute(void) {
     host_rx = rx < -32767 ? -32767 : rx; host_ry = ry < -32767 ? -32767 : ry;
 }
 
+// The overlay menu opened or closed (runtime/ui/menu.cpp): nothing held carries over.
+void input_reset(void) {
+    memset(keys_down, 0, sizeof keys_down);
+    for (int i = 0; i < 16; i++) press_ms[i] = 0;
+    recompute();
+}
+
 // From the window's event loop (nvn/vulkan/device.c ui_run).
 void input_handle_event(const SDL_Event *e) {
     switch (e->type) {
@@ -163,6 +170,10 @@ static void fill_one(uint8_t *s, uint32_t id, int64_t sampling, uint64_t buttons
     if (buttons & (1ull << 18)) lx = 32767;
     if (buttons & (1ull << 17)) ly = 32767;
     if (buttons & (1ull << 19)) ly = -32767;
+#ifdef PVR_VULKAN
+    extern bool menu_input_captured(void);
+    if (menu_input_captured()) hlx = hly = 0;
+#endif
     if (!lx && !ly) { lx = hlx; ly = hly; }  // keyboard / gamepad stick
     // stick direction bits (16..19 left, 20..23 right) as the hardware sets them
     if (lx < -16000) buttons |= 1ull << 16;
@@ -170,6 +181,9 @@ static void fill_one(uint8_t *s, uint32_t id, int64_t sampling, uint64_t buttons
     if (lx > 16000) buttons |= 1ull << 18;
     if (ly < -16000) buttons |= 1ull << 19;
     int32_t rx = host_rx, ry = host_ry;
+#ifdef PVR_VULKAN
+    if (menu_input_captured()) rx = ry = 0;
+#endif
     if (rx < -16000) buttons |= 1ull << 20;
     if (ry > 16000) buttons |= 1ull << 21;
     if (rx > 16000) buttons |= 1ull << 22;
@@ -191,6 +205,8 @@ static void fill_state(Cpu *c, int n) {
 #ifdef PVR_VULKAN
     for (int i = 0; i < 16; i++)
         if (press_ms[i] && ms + 1 - press_ms[i] < 120) b |= 1ull << i;
+    extern bool menu_input_captured(void);  // (runtime/ui/menu.cpp: the menu has the keyboard / controller)
+    if (menu_input_captured()) b = script_buttons(ms);
 #endif
     static uint64_t last_b = ~0ull;
     if (id == 0 && b != last_b) {  // (also logs keyboard / gamepad: proves the game reads them)
