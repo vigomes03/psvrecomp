@@ -45,6 +45,8 @@ falam direto com o Ollama, com prompt curto, e recusam saída que não bate com 
 | `blocked-page-recovery` | download/documentação bloqueada |
 
 Se uma skill estiver errada ou faltar uma armadilha descoberta, **corrigir a skill** (`skill_manage patch`) antes de encerrar.
+As skills específicas e versionadas deste workspace ficam em [`.agents/skills/`](.agents/skills/); carregar a
+`SKILL.md` correspondente antes de trabalho de RE ou de recompilação estática.
 
 ## 3. Como escrever um cartão (resumo; o detalhe está em `worker-cards.md`)
 - Arquivo em `work/cards/Wnn-<tema>.md`: objetivo, **API existente** que pode usar (curta), entradas/saídas,
@@ -113,11 +115,12 @@ D:\Dev\REA\
 ├─ CLAUDE.md / AGENTS.md   diretrizes (este arquivo)
 ├─ IDEA.md                 objetivo
 ├─ docs/                   achados e guias (versionado)
+├─ .agents/skills/         skills versionadas deste workspace
 ├─ tools/rea/              rea.sh (CLI enxuta), rea_worker.py (harness de RE)
 ├─ tools/workers/          local_worker.py (worker de código)
 ├─ work/                   cartões e notas de trabalho (versionado, sem conteúdo do jogo)
 ├─ lab/                    alvos, snapshots, relatórios brutos      [ignorado]
-├─ Pokemon Decompile/      nosso projeto de decompilação (o que for nosso é versionado)
+├─ psvrecomp/              nosso projeto de recompilação (o que for nosso é versionado)
 ├─ roms/                   ROMs/dumps do Switch                    [PRIVADO, ignorado]
 └─ ref/                                    referências de terceiros  [ignorado]
 ```
