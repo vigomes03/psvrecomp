@@ -1,6 +1,6 @@
 """Gates: the only accepted proof that something works in the PVRecomp pipeline.
 
-Every claim ("compila", "boot OK", "fase N concluída") must point at a gate RUN recorded here. A gate runs the real
+Every claim ("compiles", "boot OK", "phase N done") must point at a gate RUN recorded here. A gate runs the real
 command itself, checks the real artifacts/logs in code and appends one JSON line to work/evidence/gates.jsonl with
 git HEAD, exit code, artifact hashes and the checks it made. Nobody (Claude or qwen) writes that file by hand.
 
@@ -476,7 +476,7 @@ def cmd_score(a):
 
 # ---------------------------------------------------------------- fake detector
 SUCCESS_WORDS = re.compile(r"✅|PASSOU|PASSED|\bOK\b|sucesso|success|conclu[ií]d|completo|complete", re.I)
-DONE_DOC = re.compile(r"✅|\[x\]|conclu[ií]d[ao]|completa|implemented|funcionando", re.I)
+DONE_DOC = re.compile(r"✅|\[x\]|conclu[ií]d[ao]|completa|completed|implemented|funcionando|working", re.I)
 RUN_ID = re.compile(r"run_id[=: ]+([0-9a-f]{10})|gate[:=]\s*\w+@([0-9a-f]{10})")
 
 
@@ -516,9 +516,11 @@ def lint_file(p, text, runs, new_lines=None):
         if p.name in ("CLAUDE.md", "AGENTS.md"):  # rule files describe the policy, they claim nothing
             return probs
         for i, l in scan:
-            if re.search(r"❌|FALS[EO]|rejeitad|falh[ao]u", l, re.I):  # recording a failure is never a fake success
+            if re.search(r"❌|FALS[EO]|rejeitad|rejected|falh[ao]u|failed", l, re.I):  # recording a failure is never a fake success
                 continue
-            if DONE_DOC.search(l) and re.search(r"boot|fase|phase|compil|link|teste|test|funciona|HLE|implement", l, re.I):
+            prose = re.sub(r"`[^`]*`", "", l)  # inline code (log strings, `[x]` syntax) is not a claim
+            if DONE_DOC.search(prose) and re.search(r"boot|fase|phase|(?<!de)compil|link|teste|test|funciona|HLE|implement",
+                                                    prose, re.I):
                 ids = [x for m in RUN_ID.finditer(l) for x in m.groups() if x]
                 if not ids:
                     probs.append(f"line {i}: completion claim without gate run_id: {l.strip()[:90]}")

@@ -3,10 +3,19 @@
 > Read by Claude (Hermes desktop / Claude Code) and any agent working here.
 > Goal (IDEA.md): **decompile Pokémon Scarlet/Violet for personal use and understand how an AAA game is made.**
 
+## 0. Language
+- **Everything written to the repository is in English:** docs, roadmap, work cards, code, comments, commit messages,
+  log/UI strings, and file names. A Portuguese (or other non-English) file found in the repo is a bug: translate it
+  (`tools/workers/translate_worker.py`) instead of adding to it.
+- **Agents may talk to the developer in whatever language the developer prefers** (PT-BR is fine). The chat
+  language never changes the language of what gets written to the repo.
+- Exceptions kept on purpose: verbatim quotes in evidence logs (`work/evidence/*.jsonl`) and the Portuguese patterns
+  in `tools/verify/gates.py`/`test_gates.py` that detect fake claims written in Portuguese.
+
 ## 1. Roles: Claude orchestrates, local models execute
 
 **Claude is the conductor, not the executor.** All execution work goes to local models
-(Ollama, `qwen3-coder-64k` by default). Claude:
+(Ollama, `devstral:24b` by default). Claude:
 - understands the request, breaks it into **small and verifiable cards**, chooses tool and model;
 - dispatches cards and **verifies** each delivery against real evidence;
 - accepts, returns with exact errors (maximum 3 attempts) or escalates;
@@ -109,8 +118,9 @@ Apply to qwen as worker **and** any local model that assumes the chat (Hermes fa
 
 ```
 D:\Dev\REA\
+├─ README.md               overview, requirements, quick start
 ├─ CLAUDE.md / AGENTS.md   guidelines (this file)
-├─ IDEA.md                 goal
+├─ IDEA.md                 goals and non-goals
 ├─ docs/                   findings and guides (versioned)
 ├─ .agents/skills/         versioned skills for this workspace
 ├─ tools/rea/              rea.sh (lean CLI), rea_worker.py (RE harness)
@@ -124,12 +134,14 @@ D:\Dev\REA\
 Heavy tools outside repo: `D:\Tools` (Ghidra, JDK, MinGW), `D:\msys64`.
 
 ## 7. Machine resources (RTX 3070 Ti 8 GB / 32 GB RAM)
-- `qwen3-coder-64k` uses ~25 GB of RAM with offload: **one model at a time**, workers **sequential**.
+- `devstral:24b` (24B dense, 14 GB weights, ctx up to 131072) runs mostly on CPU with offload (~26 GB RAM at full ctx,
+  ~5 tok/s): **one model at a time**, workers **sequential**; pass a small `--num-ctx` when the card allows it.
+  `qwen3.8:27b` is the only other local model (also the Hermes fallback).
 - Ghidra/REA + qwen at the same time is the limit: close heavy Unity/Chrome before large batches.
-- `ollama stop qwen3-coder-64k` after each batch.
+- `ollama stop devstral:24b` after each batch.
 - C: has ~16 GB free: all downloads/cache/installations go to D:.
 
-## 8. Environment and commands (details in `docs/ambiente.md`)
+## 8. Environment and commands (details in `docs/environment.md`)
 - REA: `bash tools/rea/rea.sh <cmd> '<target>'` (lean output; `REA_RAW=1` for full envelope).
 - MCP `rea` in Hermes: 21 filtered tools (for Claude; not for qwen).
 - Native compilation: `export PATH="/d/msys64/ucrt64/bin:/d/msys64/usr/bin:$PATH"` **only in command**, never persist

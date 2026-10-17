@@ -1,30 +1,30 @@
-# W15 — Tradutor Maxwell: instrução VOTE (votação do warp), saída GLSL
+# W15 — Maxwell Translator: VOTE Instruction (Warp Voting), GLSL Output
 
-## Contexto
-Um compute shader do jogo falha com `unknown instruction 50d8e38000070010` (VOTE). API em `work/ctx/W15-translate-api.c`:
-`bits`, `reg`, `RZ`, `PT` (=7, predicado sempre verdadeiro), `pred(c, p, neg, buf)` (lê predicado: devolve "p3", "!p3",
-"true" ou "false"), `set_reg`, `sp(&c->body, ...)`, `c->pred_used[]`, `fail`, `c->glsl`. Registradores são `uint`,
-predicados são `bool p0..p6`. As extensões GL_KHR_shader_subgroup_vote/ballot já estão no cabeçalho.
+## Context
+A compute shader from the game fails with `unknown instruction 50d8e38000070010` (VOTE). API in `work/ctx/W15-translate-api.c`:
+`bits`, `reg`, `RZ`, `PT` (=7, always true predicate), `pred(c, p, neg, buf)` (reads predicate: returns "p3", "!p3",
+"true" or "false"), `set_reg`, `sp(&c->body, ...)`, `c->pred_used[]`, `fail`, `c->glsl`. Registers are `uint`,
+predicates are `bool p0..p6`. The GL_KHR_shader_subgroup_vote/ballot extensions are already in the header.
 
-## Entregue
-Só UMA função C: `static void emit_vote(Ctx *c, uint64_t w);` (se `!c->glsl`: `fail(c, "vote msl"); return;`).
+## Deliverable
+Only ONE C function: `static void emit_vote(Ctx *c, uint64_t w);` (if `!c->glsl`: `fail(c, "vote msl"); return;`).
 
-## Codificação
-| campo | bits |
+## Encoding
+| field | bits |
 |---|---|
-| d (registrador destino) | 0..7 |
-| pa (predicado de entrada) | 39..41 |
+| d (destination register) | 0..7 |
+| pa (input predicate) | 39..41 |
 | neg_pa | 42 |
-| pb (predicado de saída) | 45..47 |
-| op | 48..49: 0 ALL, 1 ANY, 2 EQ, 3 inválido → `fail(c, "vote op 3")` |
+| pb (output predicate) | 45..47 |
+| op | 48..49: 0 ALL, 1 ANY, 2 EQ, 3 invalid → `fail(c, "vote op 3")` |
 
-## Semântica (nesta ordem, num bloco próprio para não ler o resultado antes da hora)
+## Semantics (in this order, in its own block to avoid reading the result before time)
 1. `v` = `pred(c, pa, neg_pa, buf)`.
-2. Emita: `sp(&c->body, "    { bool vv = %s;\n", v);`
-3. Se pb != PT: `c->pred_used[pb] = 1;` e emita `      p<pb> = subgroupAll(vv);` (ALL) / `subgroupAny(vv)` (ANY) /
+2. Emit: `sp(&c->body, "    { bool vv = %s;\n", v);`
+3. If pb != PT: `c->pred_used[pb] = 1;` and emit `      p<pb> = subgroupAll(vv);` (ALL) / `subgroupAny(vv)` (ANY) /
    `subgroupAllEqual(vv)` (EQ).
-4. Se d != RZ: emita `      r<d> = subgroupBallot(vv).x;` e marque `c->reg_used[d] = 1;` (NÃO use set_reg aqui).
-5. Feche: `sp(&c->body, "    }\n");`.
+4. If d != RZ: emit `      r<d> = subgroupBallot(vv).x;` and mark `c->reg_used[d] = 1;` (DO NOT use set_reg here).
+5. Close: `sp(&c->body, "    }\n");`.
 
-## Aceite (o Claude roda)
-1. Compila. 2. Rodada real: `unknown instruction 50d8...` some e não aparece erro de shaderc. 3. Só a função pedida.
+## Acceptance (Claude runs)
+1. Compile. 2. Real run: `unknown instruction 50d8...` some and no shaderc error appears. 3. Only the requested function.

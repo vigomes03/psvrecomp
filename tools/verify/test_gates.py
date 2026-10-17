@@ -102,6 +102,12 @@ def main():
            "invented run_id flagged")
     expect(lint("pipeline-log.md", "| fase 3 concluída | qwen | ❌ 7 afirmações falsas |") == [],
            "recorded failure line NOT flagged")
+    expect(lint("x.md", "- [ ] 2.3 Kernel: the `[svc] UNIMPLEMENTED 0xNN` log becomes a card\n") == [],
+           "log string inside inline code NOT flagged")
+    expect(lint("x.md", "| Ghidra | decompilation | ✅ |\n") == [], "'decompilation' is not a compile claim")
+    expect(lint("x.md", "- [x] phase 2 boot ✅ (`run_id=0123456789`)\n", runs) == [],
+           "run_id written inside inline code still counts as proof")
+    expect(len(lint("x.md", "| build | compiles ✅ |\n")) == 1, "real compile claim still flagged")
     last, reached, crash, fatal, funcs = gates.boot_stage(REAL_LOG)
     expect(last == "init_sdk", f"boot stage parsed = {last}")
     expect(crash and "0x20" in crash, "crash parsed")

@@ -602,7 +602,7 @@ def main():
     # ADRP followed shortly by ADD on the same register.
     # PVRecomp: skip targets inside the SAME boundary-function as the instruction. Compiler switch lowering
     # (`adr xB, base; ldrb wI, [table, idx]; add x, xB, wI, sxtb #2; br x`) materializes a label of its own
-    # function; splitting there made 3.8k jump tables unresolvable in Pokémon's main (docs/roadmap/fase-1).
+    # function; splitting there made 3.8k jump tables unresolvable in Pokémon's main (docs/roadmap/phase-1-recompiler.md).
     # A real callback points at another function; a missed interior pointer fails loudly in rt_dispatch.
     def same_fn(pc, t):
         k = bisect.bisect_right(starts, pc) - 1

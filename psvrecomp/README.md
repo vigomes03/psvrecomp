@@ -1,41 +1,41 @@
 # PSV Recomp
 
-Recompilação estática do Pokémon Violet (v1.0.0 e update v4.0.0, cartucho e console do [USER]), seguindo o processo do
-LAS Recomp (Link's Awakening Switch). O aplicativo se chama **PSV Recomp** (título da janela, `psvrecomp.log`,
-`psvrecomp.ini`); o binário de desenvolvimento é `pvhost.exe` + `pvgame.dll`.
-Roadmap: [../docs/roadmap/README.md](../docs/roadmap/README.md). Regras: [../CLAUDE.md](../CLAUDE.md).
-**Uso local, nada sai desta máquina.**
+Static recompilation of Pokémon Violet (v1.0.0 and the v4.0.0 update, [USER]'s cartridge and console), following the
+process of LAS Recomp (Link's Awakening Switch). The application is called **PSV Recomp** (window title, `psvrecomp.log`,
+`psvrecomp.ini`); the development binary is `pvhost.exe` + `pvgame.dll`.
+Roadmap: [../docs/roadmap/README.md](../docs/roadmap/README.md). Rules: [../CLAUDE.md](../CLAUDE.md).
+**Local use, nothing leaves this machine.**
 
-## O que é (recomp, não emulador de CPU)
-- **CPU:** todo o código ARM64 do jogo (`main`, `subsdk*`, `sdk`) foi traduzido **uma vez, antes de rodar**, para C e
-  compilado para x86-64 (`pvgame.dll`, ~271 mil funções). Não há interpretador nem JIT de ARM em tempo de execução.
-- **Sistema (Horizon OS):** reimplementado em C (HLE): kernel/SVCs, IPC, serviços (`fs`, `hid`, `audren`...).
-- **GPU:** as chamadas NVN do jogo são reimplementadas sobre Vulkan; os shaders Maxwell do jogo são traduzidos para
-  GLSL/SPIR-V **em tempo de execução** (`runtime/nvn/maxwell/translate.c`), como um emulador faz com a GPU.
+## What it is (a recomp, not a CPU emulator)
+- **CPU:** all of the game's ARM64 code (`main`, `subsdk*`, `sdk`) was translated **once, before running**, to C and
+  compiled to x86-64 (`pvgame.dll`, ~271 thousand functions). There is no ARM interpreter or JIT at runtime.
+- **System (Horizon OS):** rewritten in C (HLE): kernel/SVCs, IPC, services (`fs`, `hid`, `audren`...).
+- **GPU:** the game's NVN calls are served by a Vulkan backend; the game's Maxwell shaders are translated to
+  GLSL/SPIR-V **at runtime** (`runtime/nvn/maxwell/translate.c`), like an emulator does with the GPU.
 
-## Pastas
-| Pasta | Conteúdo |
+## Folders
+| Folder | Contents |
 |---|---|
-| `recomp/` | recompilador ARM64 → C (fork do LAS `tools/`: nso, analyze, lifter, simd_c, gen, layout, sym), testes diferenciais, `build_host.sh` (runtime), lançador `run_window.cmd` |
-| `runtime/` | runtime nativo: loader, kernel, IPC, serviços, `hle/` (input, nvn_boot...), `nvn/` (camada NVN), `nvn/vulkan/` (backend), `nvn/maxwell/` (tradutor de shaders), `platform/`, `ui/` |
+| `recomp/` | ARM64 → C recompiler (fork of LAS `tools/`: nso, analyze, lifter, simd_c, gen, layout, sym), differential tests, `build_host.sh` (runtime), `run_window.cmd` launcher |
+| `runtime/` | native runtime: loader, kernel, IPC, services, `hle/` (input, nvn_boot...), `nvn/` (NVN layer), `nvn/vulkan/` (backend), `nvn/maxwell/` (shader translator), `platform/`, `ui/` |
 | `third_party/` | `LICENSE-LASRecomp.txt` (MIT, Copyright (c) 2026 Peiikai), `smaa/` (SMAA, MIT, Jorge Jimenez et al.) |
 
-Origem: `LASRecomp-main` (github.com/peiikai/LASRecomp, 14/10/2026). O que era do Zelda foi removido ou virou stub
-neutro (`runtime/pv_zelda_stubs.c`). Mudanças do recompilador em relação ao original: `patches.py` vazio, caminho do
-harness em `test_simd.py`, assinatura de `fnprof_hit` em `test_simd_harness.c`. O histórico de cada mudança do runtime
-está em `../docs/pipeline-log.md`.
+Origin: `LASRecomp-main` (github.com/peiikai/LASRecomp, 10/14/2026). What was Zelda-specific was removed or became a neutral
+stub (`runtime/pv_zelda_stubs.c`). Recompiler changes relative to the original: empty `patches.py`, harness path
+in `test_simd.py`, `fnprof_hit` signature in `test_simd_harness.c`. The history of every runtime change
+is in `../docs/pipeline-log.md`.
 
-## Rodar
+## Run
 ```bash
-# build do runtime (Vulkan) -> D:/Dev/REA/lab/host-vk/pvhost.exe
+# runtime build (Vulkan) -> D:/Dev/REA/lab/host-vk/pvhost.exe
 cd "psvrecomp/recomp" && bash build_host.sh /d/Dev/REA/lab/host-vk vulkan
-# prova de build/boot (única prova aceita, ver CLAUDE.md)
+# build/boot proof (the only accepted proof, see CLAUDE.md)
 python tools/verify/gates.py run host --version v400
 ```
-- **Jogar à mão:** dois cliques em `recomp/run_window.cmd` (sem limite de tempo, abre no monitor 2; teclado WASD/setas,
-  K ou Espaço = A, J = B, I = X, L = Y, ou controle Xbox/PS/Switch Pro). Log em `lab/host-vk/window.log`.
-- **Pipeline (Claude):** `bash tools/verify/run_auto.sh <segundos> <nome> [VAR=valor ...]` — entrada automática,
-  log `lab/host-vk/<nome>.log`, frames com `LARECOMP_SCREENSHOT_EVERY/FROM`.
+- **Play by hand:** double-click `recomp/run_window.cmd` (no time limit, opens on monitor 2; keyboard WASD/arrows,
+  K or Space = A, J = B, I = X, L = Y, or an Xbox/PS/Switch Pro controller). Log in `lab/host-vk/window.log`.
+- **Pipeline (Claude):** `bash tools/verify/run_auto.sh <seconds> <name> [VAR=value ...]` — automatic input,
+  log `lab/host-vk/<name>.log`, frames with `LARECOMP_SCREENSHOT_EVERY/FROM`.
 
 ## Extract your own Switch content
 - At the workspace root, `extract_base.cmd` extracts `roms\Pokémon Violet.xci` into `dumps\base\`.
@@ -53,37 +53,37 @@ python tools/verify/gates.py run host --version v400
 | `build_and_test_v400.cmd` | Build an isolated Vulkan host, link `pvgame.dll`, and run a 30-second boot test in `lab\host-test-v400\`. |
 | `launch_game.cmd` | Start the manual-play launcher. |
 
-## Ferramentas de diagnóstico (variáveis de ambiente, todas desligadas por padrão)
-| Variável | O que faz |
+## Diagnostic tools (environment variables, all off by default)
+| Variable | What it does |
 |---|---|
-| `LARECOMP_DEBUG_FRAME=<n>` / `PVR_DEBUG_ON=<w>x<h>/<fmt>` / `PVR_DEBUG_ON_COPY=<w>x<h>` | lista todos os draws de um frame (por número, ou disparado quando a cena usa tal textura/cópia) e salva cada passe |
-| `PVR_DIAG_SAVETEX=<w>` + `PVR_DIAG_SAVETEX_FS=<fs>` | salva as texturas lidas pelos draws de um shader |
-| `PVR_DBG_FS=<fs,...>` `PVR_DBG_PC` `PVR_DBG_REG` `PVR_DBG_RT` (+`SIGNED/FRACT/UINT`) | pinta a saída de shaders de branco ou mostra um registrador |
-| `PVR_DBG_SREF=<de>:<para>` `PVR_DBG_CBFILL=<k>:<word>` `PVR_WATCH=<addr>` | troca referência de stencil / preenche um cbuf / vigia quem escreve num endereço |
-| `PVR_LOG_COPIES` `PVR_SAVE_COPY=<w>x<h>` `PVR_LOG_TEXADDR=<addr>` | cópias de textura/buffer, origem salva, texturas num endereço |
-| `PVR_NO_BRA_CC` `PVR_NO_COPY_WRITEBACK` `PVR_NO_QUADSWAP` `PVR_NO_STENCIL_VIEW` | A/B: desliga uma correção para comparar |
-| `PVR_NVN_MISSING` `PVR_DIAG_UNKNOWN` `PVR_DUMP_THREADS` `PVR_SYM_AT` | funções NVN faltantes, instruções Maxwell desconhecidas, threads, símbolos |
-| `PVR_CPUPROF=<de_s>:<até_s>` | amostra a CPU das threads do jogo (~1 ms) e grava `build/cpuprof.txt`; relatório: `tools/rea/cpuprof_report.py build/cpuprof.txt pvgame.dll pvhost.exe` |
-| `LARECOMP_VK_PROF=1` | tempo do render thread por categoria, GPU ocupada e esperas na GPU por local (`waits by site`, RVA para `addr2line`) |
-| `PVR_GAME60=1` | (experimental, só v4.0.0) liga o modo 60 fps do próprio jogo: zera o byte "intervalo-1" da config de vídeo (lido por 0x7002b7a898); a velocidade fica certa (teste de caminhada igual ao de 30 fps) |
-| `PVR_FORCE_INTERVAL=<n>` | (experimento) o NVN guarda o intervalo n no lugar do pedido pelo jogo |
-| `PVR_FRAMEPACE=0` / `PVR_FPS_CAP=<fps>` | desliga o limitador de apresentação (o jogo acelera em cenas leves) / usa outra taxa no lugar de 60/intervalo (o Violet pede intervalo 2 = 30 fps) |
-| `PVR_XFB_SCRATCH=0` / `PVR_XFB_OWN_PASS=0` | A/B: transform feedback (personagens) volta a escrever direto na memória do guest / no passe normal |
-| `PVR_SUBMIT=list` | A/B: uma submissão por lista de comandos (o padrão segue o NVN: envia no Flush/Finish/present) |
-| `PVR_XFB_NOSTORE=1` | (medição, quebra a imagem) shaders de xfb sem as escritas |
-| `PVR_OCCLUSION_ZERO=1` | A/B: occlusion query volta a reportar 0 pixels (o jogo esconde o personagem no mundo aberto) |
-| (sempre ligado) `[frametime]` no log | a cada 10 s e no fim: média, p50/p95/p99, máx, 1% low, picos >1,5x o período e a causa (shader, upload, gpu, jogo). `PVR_FRAMETIME_CSV=<arquivo>`: uma linha por frame; `PVR_FRAMETIME_EVERY=<s>` muda o intervalo. "work" = tempo da thread que apresenta, não do jogo todo |
-| (sempre) relatório de crash | erro fatal ou exceção: o log inteiro é copiado para `<pasta do log>\crashes\crash_<data>_<hora>.log` e aparece uma caixa com a causa (não aparece em execuções com tempo, `PVR_RUN_SECONDS` > 0, nem com `PVR_NO_CRASH_BOX=1`). Ler: `python tools/rea/crash_report.py <log>` (nomeia as funções do jogo, `f_<endereço>`, com o mesmo build) |
-| `PVR_TEST_CRASH=<frame>` | provoca um erro fatal nesse frame (teste do relatório de crash) |
-| `PVR_SWKBD_TEXT=<texto>` | resposta do teclado (nome) sem janela; jogando sem ela aparece uma caixa de texto na frente do jogo; em execução com tempo usa a sugestão do jogo ou "[USER]" |
-| `PVR_SUBS=<1..64>` | quantas submissões em voo o backend usa (padrão 64; o LAS usava 8) — A/B de desempenho |
+| `LARECOMP_DEBUG_FRAME=<n>` / `PVR_DEBUG_ON=<w>x<h>/<fmt>` / `PVR_DEBUG_ON_COPY=<w>x<h>` | lists every draw of a frame (by number, or triggered when the scene uses a given texture/copy) and saves each pass |
+| `PVR_DIAG_SAVETEX=<w>` + `PVR_DIAG_SAVETEX_FS=<fs>` | saves the textures read by a shader's draws |
+| `PVR_DBG_FS=<fs,...>` `PVR_DBG_PC` `PVR_DBG_REG` `PVR_DBG_RT` (+`SIGNED/FRACT/UINT`) | paints shader output white or shows a register |
+| `PVR_DBG_SREF=<from>:<to>` `PVR_DBG_CBFILL=<k>:<word>` `PVR_WATCH=<addr>` | swaps a stencil reference / fills a cbuf / watches who writes to an address |
+| `PVR_LOG_COPIES` `PVR_SAVE_COPY=<w>x<h>` `PVR_LOG_TEXADDR=<addr>` | texture/buffer copies, saved source, textures at an address |
+| `PVR_NO_BRA_CC` `PVR_NO_COPY_WRITEBACK` `PVR_NO_QUADSWAP` `PVR_NO_STENCIL_VIEW` | A/B: turns off one fix for comparison |
+| `PVR_NVN_MISSING` `PVR_DIAG_UNKNOWN` `PVR_DUMP_THREADS` `PVR_SYM_AT` | missing NVN functions, unknown Maxwell instructions, threads, symbols |
+| `PVR_CPUPROF=<from_s>:<to_s>` | samples the CPU of the game threads (~1 ms) and writes `build/cpuprof.txt`; report: `tools/rea/cpuprof_report.py build/cpuprof.txt pvgame.dll pvhost.exe` |
+| `LARECOMP_VK_PROF=1` | render thread time by category, GPU busy, and GPU waits by site (`waits by site`, RVA for `addr2line`) |
+| `PVR_GAME60=1` | (experimental, v4.0.0 only) turns on the game's own 60 fps mode: zeroes the "interval-1" byte of the video config (read by 0x7002b7a898); the speed stays correct (walking test same as at 30 fps) |
+| `PVR_FORCE_INTERVAL=<n>` | (experiment) NVN stores interval n instead of the one the game asked for |
+| `PVR_FRAMEPACE=0` / `PVR_FPS_CAP=<fps>` | turns off the presentation limiter (the game speeds up in light scenes) / uses another rate instead of 60/interval (Violet asks for interval 2 = 30 fps) |
+| `PVR_XFB_SCRATCH=0` / `PVR_XFB_OWN_PASS=0` | A/B: transform feedback (characters) writes directly to guest memory again / in the normal pass |
+| `PVR_SUBMIT=list` | A/B: one submission per command list (the default follows NVN: submits on Flush/Finish/present) |
+| `PVR_XFB_NOSTORE=1` | (measurement, breaks the image) xfb shaders without the writes |
+| `PVR_OCCLUSION_ZERO=1` | A/B: the occlusion query reports 0 pixels again (the game hides the character in the open world) |
+| (always on) `[frametime]` in the log | every 10 s and at the end: average, p50/p95/p99, max, 1% low, spikes >1.5x the period, and the cause (shader, upload, gpu, game). `PVR_FRAMETIME_CSV=<file>`: one row per frame; `PVR_FRAMETIME_EVERY=<s>` changes the interval. "work" = time of the presenting thread, not of the whole game |
+| (always) crash report | fatal error or exception: the whole log is copied to `<log folder>\crashes\crash_<date>_<time>.log` and a box with the cause appears (not in timed runs, `PVR_RUN_SECONDS` > 0, nor with `PVR_NO_CRASH_BOX=1`). Read it with: `python tools/rea/crash_report.py <log>` (names the game functions, `f_<address>`, with the same build) |
+| `PVR_TEST_CRASH=<frame>` | triggers a fatal error at that frame (crash report test) |
+| `PVR_SWKBD_TEXT=<text>` | keyboard answer (name) without a window; when playing without it a text box appears in front of the game; in timed runs it uses the game's suggestion or "[USER]" |
+| `PVR_SUBS=<1..64>` | how many in-flight submissions the backend uses (default 64; LAS used 8) — performance A/B |
 
-Detalhe de uso e armadilhas: skill `switch-static-recompilation` (referência `vulkan-backend.md`).
+Usage details and traps: skill `switch-static-recompilation` (reference `vulkan-backend.md`).
 
-## Testes (sem precisar do jogo)
+## Tests (no game needed)
 ```bash
 cd "psvrecomp/recomp"
-export PATH="/d/msys64/ucrt64/bin:$PATH"   # clang (só neste comando)
+export PATH="/d/msys64/ucrt64/bin:$PATH"   # clang (only in this command)
 venv/Scripts/python.exe test_simd.py --encodings 400 --cases 30 --seed 1 --jobs 8
 python ../../tools/verify/test_glsl_slice.py
 ```

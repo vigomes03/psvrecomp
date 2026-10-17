@@ -1,27 +1,27 @@
-# W14 — Tradutor Maxwell: instrução VMNMX (video min/max), saída GLSL
+# W14 — Maxwell Translator: VMNMX Instruction (video min/max), GLSL Output
 
-## Contexto
-Um compute shader do jogo falha com `unknown instruction 3b34086060d70f05` (VMNMX). API disponível em
-`work/ctx/W14-translate-api.c` (trechos reais): `bits`, `reg`, `RZ`, `set_reg`, `fail`, `c->glsl`. Registradores
-são variáveis GLSL `uint` (ex.: `r12`); `reg(c, n, buf)` devolve o nome ou `0u` para RZ.
+## Context
+A compute shader from the game fails with `unknown instruction 3b34086060d70f05` (VMNMX). Available API in
+`work/ctx/W14-translate-api.c` (actual snippets): `bits`, `reg`, `RZ`, `set_reg`, `fail`, `c->glsl`. Registers
+are GLSL `uint` variables (e.g., `r12`); `reg(c, n, buf)` returns the name or `0u` for RZ.
 
-## Entregue
-Só UMA função C (sem includes, sem o resto do arquivo):
+## Deliverable
+Only ONE C function (no includes, no rest of the file):
 ```c
 static void emit_vmnmx(Ctx *c, uint64_t w);
 ```
-Se `!c->glsl`: `fail(c, "vmnmx msl"); return;`. O resultado vai para o destino com `set_reg(c, d, expr)`.
+If `!c->glsl`: `fail(c, "vmnmx msl"); return;`. The result goes to the destination with `set_reg(c, d, expr)`.
 
-## Codificação
-| campo | bits |
+## Encoding
+| field | bits |
 |---|---|
-| d (destino) | 0..7 |
-| a (registrador A) | 8..15 |
-| b (registrador B, se is_b_reg) | 20..27 |
-| b_imm (imediato 16 bits, se !is_b_reg) | 20..35 |
+| d (destination) | 0..7 |
+| a (register A) | 8..15 |
+| b (register B, if is_b_reg) | 20..27 |
+| b_imm (16-bit immediate, if !is_b_reg) | 20..35 |
 | b_selector | 28..29 |
 | b_width | 29..30 |
-| c (registrador C) | 39..46 |
+| c (register C) | 39..46 |
 | a_selector | 36..37 |
 | a_width | 37..38 |
 | cc | 47 |
@@ -32,24 +32,24 @@ Se `!c->glsl`: `fail(c, "vmnmx msl"); return;`. O resultado vai para o destino c
 | dest_sign | 54 |
 | sat | 55 |
 | mx | 56 |
-(sim, os campos selector e width se sobrepõem; copie exatamente.)
+(yes, the selector and width fields overlap; copy exactly.)
 
-## Semântica
-1. Se `cc` ou `sat`: `fail(c, "vmnmx cc/sat"); return;`.
-2. Operando A = extract(reg a, a_width, a_selector, a_sign).
-3. Operando B: se is_b_reg = extract(reg b, b_width, b_selector, b_sign); senão = extract(`<b_imm>u`, width 2, selector 0, b_sign).
+## Semantics
+1. If `cc` or `sat`: `fail(c, "vmnmx cc/sat"); return;`.
+2. Operand A = extract(reg a, a_width, a_selector, a_sign).
+3. Operand B: if is_b_reg = extract(reg b, b_width, b_selector, b_sign); else = extract(`<b_imm>u`, width 2, selector 0, b_sign).
 4. extract(x, width, sel, signed):
-   - width 0 ou 1 (byte): signed → `uint(bitfieldExtract(int(x), SEL*8, 8))`, unsigned → `bitfieldExtract(x, SEL*8, 8)`
-   - width 2 (short): o mesmo com SEL*16 e 16 bits
+   - width 0 or 1 (byte): signed → `uint(bitfieldExtract(int(x), SEL*8, 8))`, unsigned → `bitfieldExtract(x, SEL*8, 8)`
+   - width 2 (short): the same with SEL*16 and 16 bits
    - width 3 (word): `x`
-   (SEL*8 / SEL*16 são números calculados em C e escritos como literal int.)
-5. lhs = mx ? max(A, B) : min(A, B), comparação com sinal se b_sign:
+   (SEL*8 / SEL*16 are numbers calculated in C and written as literal int.)
+5. lhs = mx ? max(A, B) : min(A, B), comparison with sign if b_sign:
    signed → `uint(max(int(A), int(B)))`, unsigned → `max(A, B)`.
-6. op: 5 = MIN e 6 = MAX entre lhs e reg c, com sinal se dest_sign (mesma forma do passo 5).
-   Qualquer outro op: `fail(c, "vmnmx op %d", op); return;`.
-7. `set_reg(c, d, <expressão final>)`. Use buffers de 1024 bytes para as expressões.
+6. op: 5 = MIN and 6 = MAX between lhs and reg c, with sign if dest_sign (same form as step 5).
+   Any other op: `fail(c, "vmnmx op %d", op); return;`.
+7. `set_reg(c, d, <final expression>)`. Use buffers of 1024 bytes for the expressions.
 
-## Aceite (o Claude roda)
-1. Compila (`build_host.sh <dir> vulkan`).
-2. Rodada real: `unknown instruction 3b34...` some do log.
-3. Só a função pedida; nada de campos inventados de `Ctx`.
+## Acceptance (Claude runs)
+1. Compile (`build_host.sh <dir> vulkan`).
+2. Real run: `unknown instruction 3b34...` some from log.
+3. Only the requested function; nothing of invented fields from `Ctx`.

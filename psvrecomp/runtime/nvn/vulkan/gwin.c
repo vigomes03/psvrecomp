@@ -65,7 +65,7 @@ int gwin_cluster(const GwinRange *pools, int n, uint64_t align, uint64_t gap, ui
         cur = aligned_pools[i];
     }
     
-    // Salvar a última janela
+    // Save the last window
     if (out_count >= maxout) {
         free(aligned_pools);
         return -1;

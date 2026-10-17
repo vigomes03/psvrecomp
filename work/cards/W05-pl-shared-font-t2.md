@@ -1,7 +1,7 @@
 # W05 — `pl:u` shared font service (`runtime/services/pl.c`)
 
 ## Goal
-Pokémon Violet polls `pl:u` `GetLoadState` in a loop until the system shared fonts are "Loaded" (boot log 14/10:
+Pokémon Violet polls `pl:u` `GetLoadState` in a loop until the system shared fonts are "Loaded" (boot log 10/14:
 the game never gets past it). Implement the service so the fonts load from TTF files on the host and are exposed to
 the game through a 17 MiB shared memory block, exactly like Horizon does.
 

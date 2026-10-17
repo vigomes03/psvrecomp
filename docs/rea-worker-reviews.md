@@ -1,26 +1,26 @@
-# Revisões do Claude: worker REA local
+# Claude Reviews: Local REA Worker
 
-Gabarito do Claude (`whoami.exe`): `LookupAccountSidW` é chamada em 0x140003d24, dentro de `FUN_140003bc0`
-(ev_8e65ba5e…). Essa função habilita `SeDebugPrivilege` e resolve o SID `*param_1` em `DOMÍNIO\nome`.
-Chamadores: `FUN_140003498` (call em 0x14000377c) e `FUN_140003b3c` (call em 0x140003b64), ev_3cb3d430….
+Gabarito do Claude (`whoami.exe`): `LookupAccountSidW` is called at 0x140003d24, within `FUN_140003bc0`
+(ev_8e65ba5e…). This function enables `SeDebugPrivilege` and resolves the SID `*param_1` to `DOMÍNIO\nome`.
+Callers: `FUN_140003498` (call at 0x14000377c) and `FUN_140003b3c` (call at 0x140003b64), ev_3cb3d430….
 
-| run | executor | REA calls | tempo | veredito | motivo |
+| run | executor | REA calls | time | verdict | reason |
 |---|---|---|---|---|---|
-| 1 | delegate_task (subagente Hermes, qwen3-coder-64k) | 0 | 2m10 | REJEITADO | relatório 100% inventado (main/TokenGroups/malloc, "10 call sites") |
-| 2 | rea_worker v1 | 13 | 5m30 | REJEITADO | honesto, mas seguiu a string em .rdata; "sem referências" citando o xrefs errado |
-| 3 | rea_worker v2 (+callers) | 7 | 5m28 | ACEITO c/ correção | função certa e código verbatim; inventou o chamador `FUN_14000377c` (era endereço de chamada) |
-| 4 | rea_worker v3 (+checagem de símbolos) | 7 | 7m58 | ACEITO c/ ressalvas | função + 2 chamadores certos; ids citados = decompile (não xrefs); seção de código vazia |
+| 1 | delegate_task (Hermes subagent, qwen3-coder-64k) | 0 | 2m10 | REJECTED | 100% fabricated report (main/TokenGroups/malloc, "10 call sites") |
+| 2 | rea_worker v1 | 13 | 5m30 | REJECTED | honest, but followed the string in .rdata; "no references" citing wrong xrefs |
+| 3 | rea_worker v2 (+callers) | 7 | 5m28 | ACCEPTED with correction | correct function and verbatim code; invented caller `FUN_14000377c` (was call address) |
+| 4 | rea_worker v3 (+symbol checking) | 7 | 7m58 | ACCEPTED with reservations | correct function + 2 correct callers; cited ids = decompile (not xrefs); empty code section |
 
-## Lições dos cartões de código (W01/W02)
-- O qwen confunde `bits(w, lo, n)` com "bit alto": na tabela de campos do cartão, escreva a **chamada pronta** (`bits(w, 16, 5)`), não "bits 20:16".
-- Numa retry ele "melhora" partes que já estavam certas (mudou o tipo `Insn('op')`). No cartão de retry, liste o que **não** pode mudar,
-  e o teste de aceite deve checar a interface (tipo/assinatura), não só o texto ou o resultado.
-- Teste diferencial contra oráculo (Unicorn) pegou o erro que a leitura rápida não pegaria.
+## Lessons from Code Cards (W01/W02)
+- qwen confuses `bits(w, lo, n)` with "high bit": in the card field table, write the **ready call** (`bits(w, 16, 5)`), not "bits 20:16".
+- On a retry it "improves" parts that were already correct (changed type `Insn('op')`). In the retry card, list what **cannot** change,
+  and the acceptance test should check the interface (type/signature), not just the text or result.
+- Differential test against oracle (Unicorn) caught the error that quick reading would miss.
 
-## W20 glsl_slice.py (15/10) — REJEITADO 2x
-- t1: não imprimia nada (pc lido na ordem errada ao andar para trás; busca começava antes da própria instrução — parte
-  disso era erro do cartão, que contradizia o teste). t2: `uses` incluía o próprio registro e a recursão partia da linha 0.
-- Claude reescreveu (`tools/rea/glsl_slice.py`, teste `tools/verify/test_glsl_slice.py` PASS). Tentativas em
-  `lab/arquivo/w20/`; placar: `gates.py note --verdict FALSE`.
-- Lição: ferramenta com análise de fluxo (andar para trás com predicados) é trabalho de núcleo; o qwen acerta melhor
-  cartões com entrada/saída fixas e tabela de valores.
+## W20 glsl_slice.py (15/10) — REJECTED 2x
+- t1: did not print anything (pc read in wrong order when stepping back; search started before the instruction itself — part
+  of this was a card error, which contradicted the test). t2: `uses` included the register itself and recursion started from line 0.
+- Claude rewrote (`tools/rea/glsl_slice.py`, test `tools/verify/test_glsl_slice.py` PASS). Attempts in
+  `lab/arquivo/w20/`; score: `gates.py note --verdict FALSE`.
+- Lesson: tool with flow analysis (step back with predicates) is core work; qwen does better on cards with fixed input/output and value table.
+  - Lesson: cards with fixed input/output and value table.

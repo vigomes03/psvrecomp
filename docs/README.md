@@ -2,10 +2,10 @@
 
 | File | Content |
 |---|---|
-| [ambiente.md](ambiente.md) | Installed tools, paths, traps, missing installations |
+| [environment.md](environment.md) | Installed tools, paths, traps, missing installations |
 | [rea-local-agent.md](rea-local-agent.md) | REA + local agent (qwen) guide: architecture, contract, commands, models |
 | [rea-worker-reviews.md](rea-worker-reviews.md) | Claude's reviews of each worker execution (accepted/rejected and why) |
-| [estudo-lasrecomp.md](estudo-lasrecomp.md) | How LAS Recomp was made: static recompilation ARM64→C, HLE, NVN→Vulkan, workflow |
+| [lasrecomp-study.md](lasrecomp-study.md) | How LAS Recomp was made: static recompilation ARM64→C, HLE, NVN→Vulkan, workflow |
 | [pipeline-log.md](pipeline-log.md) | Log of each work card (owner, model, attempts, result) |
 | [../psvrecomp/README.md](../psvrecomp/README.md) | **PSV Recomp**: what it is, how to compile/run, diagnostic variables |
 | [roadmap/](roadmap/README.md) | **Pokémon Violet Recomp Roadmap**: phases 0-9, milestones, risks |

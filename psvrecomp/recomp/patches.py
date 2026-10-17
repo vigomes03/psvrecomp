@@ -9,7 +9,7 @@ e.g.:
         assert w == 0xbd457369, hex(w)  # ldr s9, [x27, #0x570]
         return '/* replacement C */'
 
-Patches are tied to one build id (docs/roadmap/achados-fase-0.md).
+Patches are tied to one build id (docs/roadmap/phase-0-findings.md).
 """
 import struct  # noqa: F401 (used by patch functions)
 

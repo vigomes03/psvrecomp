@@ -1,38 +1,38 @@
-# W18 — Agrupar memory pools da GPU em janelas de memória (função pura + teste)
+# W18 — Group GPU memory pools into memory windows (pure function + test)
 
-## Contexto
-O jogo cria centenas de memory pools NVN espalhados por ~11 GB de endereços (dois grupos grandes). O backend
-Vulkan importa a memória do convidado em "janelas" contíguas (no máximo 8, cada uma < 4 GB). Precisamos de uma função
-pura que, dada a lista de pools, devolva as janelas.
+## Context
+The game creates hundreds of NVN memory pools scattered across ~11 GB of addresses (two large groups). The Vulkan backend
+imports guest memory in "windows" that are contiguous (up to 8, each < 4 GB). We need a pure function
+that, given the list of pools, returns the windows.
 
-## Entregue: dois arquivos
-1. `gwin.c` com a função (sem dependências além de `<stdint.h>`, `<stdlib.h>`, `<string.h>`):
+## Deliverables: two files
+1. `gwin.c` with the function (no dependencies beyond `<stdint.h>`, `<stdlib.h>`, `<string.h>`):
 ```c
 typedef struct { uint64_t base, size; } GwinRange;
-// pools: n faixas [base, base+size) quaisquer (desordenadas, podem se sobrepor, size > 0).
-// Saída: janelas ordenadas por base, sem sobreposição, cada uma:
-//   base alinhada para BAIXO a `align`, fim alinhado para CIMA a `align` (align é potência de 2);
-//   cobre todos os pools que caem nela;
-// Duas faixas alinhadas se juntam numa janela só se a distância entre elas (início da 2ª - fim da 1ª) for <= gap
-// E a janela resultante tiver tamanho <= maxspan. Faixas que se tocam ou se sobrepõem sempre se juntam se couber.
-// Um pool que sozinho (alinhado) passe de maxspan vira uma janela própria mesmo assim.
-// Retorna o número de janelas escritas em out; se precisaria de mais que maxout, retorna -1.
+// pools: n ranges [base, base+size) any (unordered, may overlap, size > 0).
+// Output: windows sorted by base, no overlap, each one:
+//   base aligned DOWN to `align`, end aligned UP to `align` (align is power of 2);
+//   covers all pools that fall into it;
+// Two aligned ranges join into a single window if the distance between them (start of 2nd - end of 1st) is <= gap
+// And the resulting window has size <= maxspan. Ranges that touch or overlap always join if they fit.
+// A pool that alone (aligned) exceeds maxspan becomes its own window anyway.
+// Returns the number of windows written to out; if more than maxout would be needed, returns -1.
 int gwin_cluster(const GwinRange *pools, int n, uint64_t align, uint64_t gap, uint64_t maxspan,
                  GwinRange *out, int maxout);
 ```
-Algoritmo sugerido: copiar, alinhar cada faixa, ordenar por base (qsort), varrer juntando enquanto as regras deixarem.
+Suggested algorithm: copy, align each range, sort by base (qsort), scan joining while rules allow.
 
-2. `test_gwin.c` com `main()` que testa e imprime `PASS n` ou `FAIL <caso>` (retorno 0 só se todos passarem):
-| caso | pools (base, size) | align, gap, maxspan, maxout | janelas esperadas (base, size) |
+2. `test_gwin.c` with `main()` that tests and prints `PASS n` or `FAIL <caso>` (returns 0 only if all pass):
+| case | pools (base, size) | align, gap, maxspan, maxout | expected windows (base, size) |
 |---|---|---|---|
-| vazio | — | 0x4000000, 0x20000000, 0xF0000000, 8 | 0 janelas |
-| um | (0x7441c8f000, 0x10000) | 0x4000000, 0x20000000, 0xF0000000, 8 | (0x7440000000, 0x4000000) |
-| dois perto | (0x7441c8f000, 0x10000), (0x7449900000, 0x100000) | idem | (0x7440000000, 0xC000000) |
-| dois longe | (0x7441c8f000, 0x10000), (0x76c9c00000, 0x1000) | idem | (0x7440000000, 0x4000000), (0x76c8000000, 0x4000000) |
-| desordenado | (0x76c9c00000, 0x1000), (0x7441c8f000, 0x10000) | idem | igual ao "dois longe" |
+| empty | — | 0x4000000, 0x20000000, 0xF0000000, 8 | 0 windows |
+| one | (0x7441c8f000, 0x10000) | 0x4000000, 0x20000000, 0xF0000000, 8 | (0x7440000000, 0x4000000) |
+| two close | (0x7441c8f000, 0x10000), (0x7449900000, 0x100000) | same | (0x7440000000, 0xC000000) |
+| two far | (0x7441c8f000, 0x10000), (0x76c9c00000, 0x1000) | same | (0x7440000000, 0x4000000), (0x76c8000000, 0x4000000) |
+| disordered | (0x76c9c00000, 0x1000), (0x7441c8f000, 0x10000) | same | same as "two far" |
 | maxspan | (0x0, 0x1000), (0x10000000, 0x1000) | 0x1000000, 0x20000000, 0x8000000, 8 | (0x0, 0x1000000), (0x10000000, 0x1000000) |
-| maxout | 3 pools em 0x0, 0x40000000, 0x80000000 (size 0x1000) | 0x1000000, 0x1000000, 0xF0000000, 2 | retorno -1 |
+| maxout | 3 pools at 0x0, 0x40000000, 0x80000000 (size 0x1000) | 0x1000000, 0x1000000, 0xF0000000, 2 | return -1 |
 
-## Aceite (o Claude roda)
-`clang -O2 -Wall gwin.c test_gwin.c -o test_gwin.exe && ./test_gwin.exe` imprime `PASS 7` e retorna 0, sem warnings.
-Não invente casos com valores diferentes dos da tabela.
+## Acceptance (Claude runs)
+`clang -O2 -Wall gwin.c test_gwin.c -o test_gwin.exe && ./test_gwin.exe` prints `PASS 7` and returns 0, without warnings.
+Do not invent cases with different values from the table.

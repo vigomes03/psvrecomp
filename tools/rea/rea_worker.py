@@ -13,7 +13,7 @@ Exit code 0 = report accepted (still to be reviewed by Claude), 2 = contract fai
 Usage:
   python tools/rea/rea_worker.py --target "D:\\Dev\\REA\\lab\\targets\\x.exe" \
       --question "Which function calls LookupAccountSidW and what does it do?" \
-      --out D:\\Dev\\REA\\lab\\reports\\x-topic.md [--model qwen3-coder-64k] [--max-steps 14]
+      --out D:\\Dev\\REA\\lab\\reports\\x-topic.md [--model devstral:24b] [--max-steps 14]
 """
 import argparse, json, os, re, subprocess, sys, time, urllib.request
 from pathlib import Path
@@ -30,7 +30,7 @@ OLLAMA = "http://127.0.0.1:11434/api/chat"
 ALLOWED = {"analyze", "search", "xrefs", "function", "decompile", "callers"}
 MIN_CALLS = 3
 MAX_TOOL_CHARS = 7000
-SECTIONS = ["## Observado", "## Inferido", "## Falhas"]
+SECTIONS = ["## Observed", "## Inferred", "## Failures"]
 EV_RE = re.compile(r"ev_[0-9a-f]{16,64}")
 SYM_RE = re.compile(r"\b(?:FUN|LAB|DAT)_[0-9a-fA-F]{6,}\b|\b0x[0-9a-fA-F]{6,}\b")
 
@@ -61,20 +61,20 @@ TOOLS = [
             "required": ["report"]}}},
 ]
 
-SYSTEM = """Você é um analista de engenharia reversa trabalhando SOMENTE com a ferramenta `rea`.
-Você ainda não sabe nada sobre o alvo. Tudo o que afirmar precisa vir de uma saída de `rea`.
-Método: callers (nome da API) -> decompile na função que contém a chamada (use o nome FUN_... ou o endereço de entrada que `callers` mostrou) -> ler o pseudocódigo -> se preciso, callers dessa função para subir na cadeia.
-Uma string com o nome da API (search de strings) NÃO é a função; use kind=procedures ou callers.
-Endereços em .rdata são tabela de import (não são código); código fica em .text.
-Faça UMA chamada de ferramenta por vez e leia o resultado antes da próxima.
-Ao terminar, chame `finish` com um relatório markdown contendo exatamente estas seções:
-# <alvo>: <tema>
-## Pergunta
-## Observado        (cada item termina com o evidence_id real entre parênteses)
-## Código relevante (trecho copiado da saída, sem inventar)
-## Inferido         (interpretação, citando os evidence_id em que se baseia)
-## Falhas / perguntas em aberto
-Nunca invente endereço, nome, string ou código. "Não encontrei" é uma resposta válida."""
+SYSTEM = """You are a reverse engineering analyst working ONLY with the `rea` tool.
+You do not know anything about the target yet. Everything you state must come from a `rea` output.
+Method: callers (API name) -> decompile the function that contains the call (use the FUN_... name or the entry address that `callers` showed) -> read the pseudocode -> if needed, callers of that function to climb the chain.
+A string with the API name (string search) is NOT the function; use kind=procedures or callers.
+Addresses in .rdata are the import table (not code); code lives in .text.
+Make ONE tool call at a time and read the result before the next one.
+When done, call `finish` with a markdown report containing exactly these sections:
+# <target>: <topic>
+## Question
+## Observed          (each item ends with the real evidence_id in parentheses)
+## Relevant code     (excerpt copied from the output, nothing invented)
+## Inferred          (interpretation, citing the evidence_ids it is based on)
+## Failures / open questions
+Never invent an address, name, string or code. "Not found" is a valid answer."""
 
 
 def rea_json(target, cmd, arg=None, kind=None):
@@ -165,7 +165,7 @@ def run_rea(target, a, log):
                           "chars": len(out), "out": out[:20000]}, ensure_ascii=False) + "\n")
     chunk = out[off:off + MAX_TOOL_CHARS]
     if off + MAX_TOOL_CHARS < len(out):
-        chunk += f"\n[cortado: mostrando {off}-{off+MAX_TOOL_CHARS} de {len(out)} chars; repita com offset={off+MAX_TOOL_CHARS}]"
+        chunk += f"\n[truncated: showing {off}-{off+MAX_TOOL_CHARS} of {len(out)} chars; repeat with offset={off+MAX_TOOL_CHARS}]"
     return chunk
 
 
@@ -174,20 +174,20 @@ def check_report(report, seen_ids, ok_calls, seen_text=""):
     low = seen_text.lower()
     ghosts = sorted({s for s in SYM_RE.findall(report) if s.lower() not in low})
     if ghosts:
-        problems.append("estes nomes/endereços não aparecem em NENHUMA saída do REA (provável confusão entre "
-                        "endereço de chamada e nome de função): " + ", ".join(ghosts) +
-                        ". Um endereço de xrefs é o local da chamada; use `function <endereço>` para saber o nome da função que o contém.")
+        problems.append("these names/addresses do not appear in ANY REA output (likely confusion between a "
+                        "call-site address and a function name): " + ", ".join(ghosts) +
+                        ". An xrefs address is the call site; use `function <address>` to get the name of the function that contains it.")
     if ok_calls < MIN_CALLS:
-        problems.append(f"você fez só {ok_calls} chamadas REA bem-sucedidas; mínimo {MIN_CALLS}. Investigue mais antes de concluir.")
+        problems.append(f"you made only {ok_calls} successful REA calls; minimum {MIN_CALLS}. Investigate more before concluding.")
     cited = set(EV_RE.findall(report))
     if not cited:
-        problems.append("o relatório não cita nenhum evidence_id.")
+        problems.append("the report does not cite any evidence_id.")
     fake = sorted(cited - seen_ids)
     if fake:
-        problems.append("estes evidence_id NÃO vieram de nenhuma chamada sua (inventados ou copiados errado): " + ", ".join(fake))
+        problems.append("these evidence_ids did NOT come from any of your calls (invented or miscopied): " + ", ".join(fake))
     for s in SECTIONS:
         if s.lower() not in report.lower():
-            problems.append(f"falta a seção '{s}'.")
+            problems.append(f"missing section '{s}'.")
     return problems
 
 
@@ -204,13 +204,13 @@ def main():
     ap.add_argument("--target", required=True)
     ap.add_argument("--question", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--model", default="qwen3-coder-64k")
+    ap.add_argument("--model", default="devstral:24b")
     ap.add_argument("--max-steps", type=int, default=14)
     a = ap.parse_args()
     out = Path(a.out); out.parent.mkdir(parents=True, exist_ok=True)
     log = open(out.with_suffix(".log.jsonl"), "w", encoding="utf-8")
     messages = [{"role": "system", "content": SYSTEM},
-                {"role": "user", "content": f"Alvo: {a.target}\nPergunta: {a.question}\nComece com uma chamada `rea`."}]
+                {"role": "user", "content": f"Target: {a.target}\nQuestion: {a.question}\nStart with a `rea` call."}]
     seen, ok_calls, refusals, t0 = set(), 0, 0, time.time()
     seen_text = a.target + "\n" + a.question
     stats = {"model": a.model, "rea_calls": 0, "llm_calls": 0, "prompt_tokens": 0, "eval_tokens": 0}
@@ -225,7 +225,7 @@ def main():
         log.write(json.dumps({"t": "llm", "content": msg.get("content", "")[:4000],
                               "tool_calls": calls}, ensure_ascii=False) + "\n"); log.flush()
         if not calls:
-            messages.append({"role": "user", "content": "Use uma ferramenta: `rea` para investigar ou `finish` para entregar o relatório."})
+            messages.append({"role": "user", "content": "Use a tool: `rea` to investigate or `finish` to deliver the report."})
             continue
         for c in calls[:1]:  # one action per turn
             fn, args = c["function"]["name"], c["function"].get("arguments") or {}
@@ -234,7 +234,7 @@ def main():
                 except Exception: args = {}
             if fn == "rea":
                 if stats["rea_calls"] >= a.max_steps:
-                    res = "ERROR: orçamento de chamadas REA esgotado. Chame `finish` agora com o que tem."
+                    res = "ERROR: REA call budget exhausted. Call `finish` now with what you have."
                 else:
                     res = run_rea(a.target, args, log)
                     seen_text += "\n" + res

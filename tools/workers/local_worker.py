@@ -6,7 +6,7 @@ retries with the exact errors (max 3), or finishes it editorially. Never install
 
 Usage:
   python tools/workers/local_worker.py --task work/cards/W01-x.md --out path/to/file.py \
-      [--ctx a.py b.h] [--lang python] [--model qwen3-coder-64k] [--num-ctx 32768]
+      [--ctx a.py b.h] [--lang python] [--model devstral:24b] [--num-ctx 32768]
 Output: writes --out and prints JSON stats (tokens, tok/s, seconds). Exit 0 = a code block was found.
 """
 import argparse, json, re, sys, time, urllib.request
@@ -29,7 +29,7 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--ctx", nargs="*", default=[])
     ap.add_argument("--lang", default="", help="hint appended to the prompt, e.g. python / c / cpp")
-    ap.add_argument("--model", default="qwen3-coder-64k")
+    ap.add_argument("--model", default="devstral:24b")
     ap.add_argument("--num-ctx", type=int, default=32768)
     ap.add_argument("--host", default="http://127.0.0.1:11434")
     ap.add_argument("--temperature", type=float, default=0.2)
