@@ -17,72 +17,42 @@ Base técnica: [estudo-lasrecomp.md](../estudo-lasrecomp.md) (como o Zelda foi f
 | 1 | [Recompilador](fase-1-recompilador.md) | todo o `main` vira C que **compila**; testes diferenciais verdes | `tools/gen.py`, `lifter.py`, `simd_c.py` | ✅ **M1** (pvgame.dll com 271k funções, linkada no boot run_id=990a33212b); **1.7 reaberto com prioridade**: função ausente em `7000cedb00` derruba a 1ª batalha |
 | 2 | [Runtime mínimo / boot headless](fase-2-runtime-boot.md) | o jogo roda `nn::init::Start` → `nnMain` e chega ao loop principal **sem gráficos** | `loader.c`, `kernel.c`, `dispatch.c`, `ipc.c`, `services/` | ✅ **M2** nas duas versões (v400 run_id=7adc0390c2, base run_id=db35401e31) |
 | 3 | [Sistema de arquivos e dados](fase-3-arquivos.md) | o jogo lê o romfs (base + patch) e os arquivos `trpfs` sozinho | `services/fs.c`, `romfs_build.c` | 🟢 na prática: o jogo carrega tudo do romfs; **save persistente** (fecha, reabre e carrega) — teste manual do [USER], 15/10 |
-| 4 | [Gráficos: NVN → Vulkan](fase-4-graficos.md) | **primeiro frame**: logo / tela de título renderizada | `runtime/nvn/*`, `maxwell/translate.c`, `vulkan/` | 🟢 **M3/M4** atingidos no teste manual (nota 95/100); faltam artefatos de iluminação, skybox com linhas, objetos não renderizados, gate `window` |
-| 5 | [Áudio, input, save, tempo](fase-5-sistemas.md) | controle funciona, som toca, save grava/carrega | `services/audio.c`, `hle/input.c`, `fs.c` (save) | 🟡 input e save ok; **áudio: silêncio total**; **teclado do nome (swkbd) ausente** |
-| 6 | [Jogável](fase-6-jogavel.md) | começar um jogo novo e andar pelo mapa aberto | ciclo shot.sh + correções | 🟡 **M5** e **M6 parcial** no teste manual (intro, começo da história, 1ª batalha); 30 fps com clock fixo; 60 fps experimental; falta fluidez (engasgos) e o crash raro conhecido |
-| 7 | [Ferramentas de RE e debug](fase-7-ferramentas-re.md) | (contínua) fnprof, ganchos `PVR_*`, screenshot automático, REA/Ghidra | `fnprof.c`, `LARECOMP_*`, `sym.py`, `shot.sh` | 🟢 contínua: kit `PVR_*`, `glsl_slice.py`, `run_auto.sh`, gates; **falta log/aviso de crash** |
-| 8 | [O aplicativo](fase-8-aplicativo.md) | launcher, menu overlay, resolução/FPS desbloqueados, recursos nossos | `ui/launcher.mm`, `menu.mm`, `hle/widescreen.c` | 🟡 nome **PSV Recomp**, `psvrecomp.ini`, `run_window.cmd` |
+| 4 | [Gráficos: NVN → Vulkan](fase-4-graficos.md) | **primeiro frame**: logo / tela de título renderizada | `runtime/nvn/*`, `maxwell/translate.c`, `vulkan/` | 🟢 **M3/M4**: árvores, névoa do vale, céu, terreno e iluminação alinhados ao Eden; sobra comparar/refinar o desfoque de distância |
+| 5 | [Áudio, input, save, tempo](fase-5-sistemas.md) | controle funciona, som toca, save grava/carrega | `services/audio.c`, `hle/input.c`, `fs.c` (save) | 🟢 teclado, áudio, save e relógio do jogo funcionam; áudio e nome confirmados pelo [USER] em 16/10 |
+| 6 | [Jogável](fase-6-jogavel.md) | começar um jogo novo e andar pelo mapa aberto | ciclo shot.sh + correções | 🟢 **M5/M6**: mundo aberto a 30 fps com velocidade correta; espelhos de VRAM reduzem o trabalho da GPU. Crashes raros seguem registrados e adiados |
+| 7 | [Ferramentas de RE e debug](fase-7-ferramentas-re.md) | (contínua) fnprof, ganchos `PVR_*`, screenshot automático, REA/Ghidra | `fnprof.c`, `LARECOMP_*`, `sym.py`, `shot.sh` | 🟢 contínua: kit `PVR_*`, `glsl_slice.py`, `run_auto.sh`, gates, relatório de crash e safe start do ini |
+| 8 | [O aplicativo](fase-8-aplicativo.md) | launcher, menu overlay, resolução/FPS desbloqueados, recursos nossos | `ui/launcher.mm`, `menu.mm`, `hle/widescreen.c` | 🟡 nome **PSV Recomp**, `psvrecomp.ini`, safe start, `run_window.cmd` e menu F1; falta a tela inicial/launcher |
 | 9 | [Entender o jogo (estudo AAA)](fase-9-estudo-aaa.md) | documentação de motor, formatos, sistemas de jogo | (não existe no LAS: é o nosso objetivo de estudo) | ⬜ contínua |
 
 Ordem real: **0 → 1 → 2 → 3 → 4 → 5 → 6 → 8**, com **7 e 9 correndo em paralelo** desde a fase 1.
 
-## Estado e próximos passos (revisão com o [USER], 15/10/2026)
+## Estado e próximos passos (revisão com o [USER], 16/10/2026)
 
 **Alvo principal: v4.0.0** (com o update). A v1.0.0 segue só como build de comparação.
 
-Marcos: M0-M2 provados por gate. **M3, M4, M5** atingidos e **M6 parcial** pelo teste manual do [USER] (15/10): do
-logo até o começo da história, mais de 10 min sem crash, save persistente; o gate automático `window` fica como item
-próprio para formalizá-los.
+Marcos: M0-M2 provados por gate. **M3-M6** têm gate `window`/teste manual do [USER]; M6 inclui 10 min no mundo aberto
+(run_id=c6a80b10d8). O alvo de jogo é **30 fps estáveis, com velocidade correta**. Explorar 60 fps está suspenso até o
+[USER] pedir explicitamente.
 
-Ordem de trabalho (atualizada no fim de 15/10; 🟢 = provado por run_auto/teste do [USER], sem gate):
-1. 🟢 **Crash da 1ª batalha** (1.7): jump table mal resolvida no gen.py — corrigido (commit 28c44eb); a batalha roda.
-2. 🟢 **Desempenho (6.6)** — os 3 objetivos do [USER]:
-   - 🟢 **Clock fixo:** o jogo pede intervalo 2 (30 fps) e o limitador `runtime/framepace.c` respeita; menu/loading
-     não aceleram mais (commit 0ad8fe3).
-   - 🟢 **30 fps:** batalha 9 → 28 fps (FP do mingw), depois 46-48 fps sem limitador (transform feedback em VRAM);
-     mundo aberto parado 54-63 sem limitador. Personagem invisível no mundo aberto corrigido (occlusion query).
-   - 🧪 **60 fps:** `PVR_GAME60=1` liga o modo 60 do próprio jogo com a velocidade certa (só v4.0.0, experimental).
-     Falta: opção no menu/`psvrecomp.ini`, teste longo de sincronia (animações, cutscenes).
-   - **Regra de teste ([USER], 15/10): daqui em diante tudo é testado a 30 fps** (limitador ligado, sem
-     `PVR_FRAMEPACE=0` / `PVR_GAME60`), salvo medição de folga pedida explicitamente.
-3. 🟢 **Fluidez / consistência (6.8)** — medição feita (commit 912c97b): a 30 fps os picos só aparecem no carregamento
-   e na compilação de shaders ao entrar em cenas novas; o [USER] considera os 30 fps ok (15/10). Os itens abaixo ficam
-   em espera, retomados se os engasgos voltarem a incomodar ou para preparar 60 fps / fidelidade:
-   1. **Medição** por frame: tempo de cada frame, 1% low, quantos picos e a causa de cada um (compilação de shader,
-      upload de textura, espera de GPU, jogo). Sem isso qualquer correção é chute.
-   2. **Compilação de shader durante o jogo:** `compiles N pending` e draws pulados em áreas novas → pré-compilar
-      (no carregamento / offline) ou pipeline libraries.
-   3. **Upload de texturas:** ~200 MB a cada 2 s re-checados/re-enviados → rastrear páginas escritas (proteção de
-      memória) em vez de comparar tudo.
-   4. **Pontos de sincronia CPU↔GPU:** cópia buffer→buffer e leituras de imagem pela CPU forçam flush + espera.
-   5. **Ritmo de apresentação vs monitor:** o limitador usa timer, não o refresh do monitor → alternância de 2/3
-     refreshes por frame em 60/144 Hz. Apresentar sincronizado ou VRR.
-   6. **Código recompilado:** ~7 % ainda no caminho lento de FP; FN_ENTER em toda função; dispatch indireto.
-   7. **Memória:** dados que a GPU lê (vértices, constantes) moram na RAM e são lidos via PCIe; cópias em VRAM
-      dos mais usados.
-4. 🟢 **Log e aviso de crash (7.x):** caixa de erro com a causa + cópia do log em `crashes/` + `tools/rea/crash_report.py` (16/10; falta o [USER] ver a caixa na janela).
-5. **Visual:** 🟢 céu com faixa corrigido 16/10 (LUT 3D de atmosfera com block depth errado: layout empacotado 3D ignorado em nvn/objects.c; o céu ficou azul-claro como no jogo). 🟢 chão de areia no lugar da grama corrigido 16/10 (TLDS de array 2D com coordenadas transpostas no tradutor: o
-   terreno lia o mapa de materiais no ponto espelhado); draws indiretos passaram a ser executados. 🟢 árvores corrigidas
-   16/10 (S2R de lane = 0 no culling da GPU). Novos lugares com diferença: o [USER] indica, criamos save e comparamos
-   com o Eden (`eden.exe -g lab/eden_game/violet.xci`, update em `lab/eden_content`, relógio igual via `PVR_CLOCK_START`).
-   Comparação com o Eden (referência, mesmo save, mesmo ponto; `lab/host-diag/ab_eden_big.png`, 16/10):
-   - [x] **Árvores ausentes** — corrigido 16/10 (S2R LANEID/LTMASK = 0 no append agregado por warp do culling da GPU)
-   - [x] Imagem clara/lavada, sombras sem azul, pouca oclusão — **não eram bugs de luz**: hora do dia diferente entre as
-     capturas (o Violet segue o relógio; 1 dia = 72 min) + árvores ausentes. Com `PVR_CLOCK_START` no instante da captura
-     do Eden: luminância 134,3 vs 133,2, contraste 65,5 vs 65,9, saturação 101,6 vs 99,6, diferença média 5/255 (16/10)
-   - [ ] Pequeno: névoa/desfoque de distância um pouco mais suave no Eden (fundo central)
-   - [x] **Névoa/vapor sobre as lagoas e encostas ausente** — corrigido 16/10: `IPA` modo multiply ignorava o registrador multiplicador (a névoa lia a profundidade da cena num texel fixo e se apagava). Antes: (save `lab/saves/user_lighthouse_20261016`, em cima do
-     farol, vs Eden no mesmo relógio): o Eden mostra fiapos brancos de neblina sobre as lagoas do vale e junto aos
-     paredões; no nosso nunca aparecem (3 quadros). Resto da cena igual: mesmos objetos, árvores e prédios; luminância
-     150,1 vs 151,1, saturação 103,2 vs 103,4, diferença média 7/255. Suspeita: partículas/volumes de névoa (efeito
-     semitransparente), caçar pelo `[draw]` com blend no passe HDR
-   - [x] Moitas menos densas perto da placa — mesma causa das árvores, corrigido 16/10
-6. 🟢 **Áudio (5.1):** corrigido 16/10 (o build de janela usava o dispositivo de áudio falso do headless); o jogo toca pelo audout. **Confirmado pelo [USER]** (ouviu na janela, 16/10).
-7. 🟢 **Teclado do nome (5.6, swkbd):** caixa de texto na frente do jogo, no monitor do jogo + resposta em UTF-16 (o Violet não usa UTF-8). **Confirmado pelo [USER]:** digitou "Lokiju" e a ficha mostra o nome e a foto (16/10).
-8. ✅ **Gate `window`:** `gates.py run window` (jogo novo, 30 fps, sem crash, telas renderizadas, cena avança) — run_id=312d34de1a.
-9. **Fidelidade (futuro, depois da fluidez):** resolução 1440p/4K (a base do LAS já tem escala de render; faltam
-   cópias para a CPU de imagens escaladas e efeitos com pixel fixo; medir VRAM), anti-aliasing (há SMAA no código
-   herdado — conferir se está ligado e qual AA o jogo usa), filtro anisotrópico.
+Ordem de trabalho atual (16/10; 🟢 = execução/teste real; os crashes raros são baixa prioridade, depois do app):
+1. 🟢 **Desempenho / 30 fps (6.6):** o intervalo 2 do jogo mantém 30 fps e a velocidade correta. O gargalo que entrou
+   com árvores e detalhes era a GPU buscar vértices/índices dos pools importados da RAM via PCIe: espelhos de 16 MB na
+   VRAM, invalidados por `MEM_WRITE_WATCH`, baixaram o trabalho da GPU de ~1300 para ~700 ms a cada 2 s. Quatro runs
+   (incluindo Poco Path) sem crash e 30 fps cravados; o jogo tinha ~45 fps sem limitador, mas fica limitado a 30 por decisão
+   do [USER]. `PVR_VRAM_MIRROR=0`/`PVR_NO_WRITE_WATCH=1` voltam ao caminho antigo.
+2. 🟢 **Fluidez / consistência (6.8):** a 30 fps, o trabalho por quadro ficou em ~17–19 ms; picos observados nos testes
+   são compilação/carregamento e capturas do pipeline. Só retomar esta investigação se os engasgos voltarem a incomodar.
+3. 🟢 **Visual:** céu, terreno, árvores/moitas, iluminação e névoa sobre o vale foram comparados com o Eden no mesmo save
+   e horário (`PVR_CLOCK_START`). A imagem principal bate; sobra apenas comparar/refinar o desfoque de distância, se o
+   [USER] apontar uma cena onde incomode.
+4. 🟢 **Sistemas (fase 5):** áudio e teclado do nome funcionam e foram confirmados pelo [USER]; save e relógio persistem.
+5. 🟡 **APP / M7:** menu overlay estilo LAS pronto (F1/Esc; controle: Home ou Back+Start): Controls, Video (monitor,
+   fullscreen, VSync, FPS, escala, FSR1, SMAA), Audio e Quit. Configurações em `psvrecomp.ini`; se morrer durante a
+   abertura ou até 300 frames depois de uma mudança, a próxima abertura arquiva o ini em `.crashed` e usa defaults.
+   **Próximo cartão:** tela inicial/launcher com Play, Settings e Quit; ela deve segurar a inicialização do jogo até Play.
+6. ⏸️ **60 fps:** `PVR_GAME60=1` existe como experimento, mas não entra no menu nem é alvo agora.
+7. ⏸️ **Crashes raros:** vestiário e primeira batalha permanecem registrados abaixo; só retomar depois do APP ou se
+   ficarem determinísticos.
 
 ## Problemas conhecidos (para caçar depois)
 
