@@ -94,12 +94,18 @@ static void set_open(bool open) {
     if (open == g_open.load()) return;
     g_open.store(open);
     input_reset();  // nothing held while the menu had focus leaks into the game
+    static Settings before;  // (closed with changes: watch the next frames - a crash restarts on the defaults)
     if (open) {
+        before = g_settings;
         static bool opened;  // the controller's cursor: the first tab the first time this session, later the selected one
         menu_tabs_focus(!opened);
         opened = true;
     }
-    else { settings_save(); osk_cancel(); }
+    else {
+        settings_save();
+        if (memcmp(&before, &g_settings, sizeof before)) settings_arm_check();
+        osk_cancel();
+    }
     LOG("[menu] %s\n", open ? "opened" : "closed");
 }
 

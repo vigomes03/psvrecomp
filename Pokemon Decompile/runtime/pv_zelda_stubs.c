@@ -28,9 +28,13 @@ void escape_bottle_tint(int kind, const float *ui, uint32_t ui_size, float tint[
 
 volatile int g_debug_frame_request;
 
-const char *const g_heart_colours[7] = {"Default", "Blue", "Green", "Purple", "Gold", "Orange", "Pink"};
+// (sizes from settings.h: settings_load walks N_*_COLOURS entries; 7-entry arrays read past the end -> crash at
+// start once the menu had saved "tunic = Default" into psvrecomp.ini, 16/10)
+#include "settings.h"
+const char *const g_heart_colours[N_HEART_COLOURS] = {"Default", "Blue", "Green", "Purple", "Gold", "Orange", "Pink", "-", "-"};
 
-const char *const g_tunic_colours[7] = {"Default", "Purple", "Orange", "Yellow", "Pink", "Teal", "Sky"};
+const char *const g_tunic_colours[N_TUNIC_COLOURS] = {"Default", "Purple", "Orange", "Yellow", "Pink", "Teal", "Sky",
+                                                       "-", "-", "-", "-", "-", "-"};
 
 const char *game_level_name(void) {
     return "";

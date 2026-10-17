@@ -35,10 +35,48 @@ Settings g_settings = {
     .upscaler = UPSCALE_SHARP,  // (MetalFX on macOS, AMD FSR 1 on Windows)
 };
 
+// (PVRecomp) Safe start: a marker file (<ini>.check) exists from start-up (and from each change made in the menu)
+// until the game has presented SAFE_FRAMES frames. Found at start-up = the last run died right after starting or
+// right after a settings change: the settings go aside to <ini>.crashed and this run uses the defaults.
+enum { SAFE_FRAMES = 300 };
+static uint64_t g_check_from = ~0ull;  // frame the check was armed at (~0: not armed)
+static void check_path(char *out, size_t n, const char *ext) { snprintf(out, n, "%s.%s", SETTINGS_FILE, ext); }
+void settings_arm_check(void) {
+    char p[512];
+    check_path(p, sizeof p, "check");
+    FILE *m = fopen(p, "w");
+    if (m) { fputs("PSV Recomp: removed once the game runs; found at start-up = the settings go aside\n", m); fclose(m); }
+    g_check_from = 0;  // (counted from the next frame reported)
+}
+void settings_frame(uint64_t frame) {
+    if (g_check_from == ~0ull) return;
+    if (!g_check_from) g_check_from = frame ? frame : 1;
+    if (frame - g_check_from < SAFE_FRAMES) return;
+    char p[512];
+    check_path(p, sizeof p, "check");
+    remove(p);
+    g_check_from = ~0ull;
+}
+
 void settings_load(void) {
     static bool loaded;
     if (loaded) return;
     loaded = true;
+    {
+        char chk[512], bad[512];
+        check_path(chk, sizeof chk, "check");
+        check_path(bad, sizeof bad, "crashed");
+        FILE *m = fopen(chk, "r");
+        if (m) {
+            fclose(m);
+            remove(bad);
+            if (rename(SETTINGS_FILE, bad) == 0)
+                LOG("[settings] the last run stopped right after starting / a settings change: %s moved to %s, defaults\n",
+                    SETTINGS_FILE, bad);
+            remove(chk);
+        }
+        settings_arm_check();
+    }
     FILE *f = fopen(SETTINGS_FILE, "r");
     if (!f) return;
     char line[256];

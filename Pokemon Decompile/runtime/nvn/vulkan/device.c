@@ -527,6 +527,7 @@ void backend_present(NvnTexture *t) {
         if (menu_at < 0) menu_at = getenv("LARECOMP_MENU_AT") ? atol(getenv("LARECOMP_MENU_AT")) : 0;
         if (menu_at && (long)total_frames + 1 == menu_at) { extern void menu_test_open(void); menu_test_open(); }
         { extern void menu_test_keys(uint64_t frame); menu_test_keys(total_frames + 1); }
+        settings_frame(total_frames + 1);  // (safe start: clears the check once the game has run a while)
         menu_render((void *)cb, g_vk.sc_extent.width, g_vk.sc_extent.height);
         static long win_shot = -1;
         if (win_shot < 0) win_shot = getenv("LARECOMP_WINDOW_SHOT") ? atol(getenv("LARECOMP_WINDOW_SHOT")) : 0;

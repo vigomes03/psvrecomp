@@ -1,6 +1,7 @@
 // User settings (larecomp.ini next to the executable's working directory), edited from the in-game menu.
 #pragma once
 #include <stdbool.h>
+#include <stdint.h>
 
 enum { ASPECT_UNLOCKED = 0, ASPECT_ORIGINAL = 1 };
 enum { RES_MATCH = 0, /* 1..8 = 1x..8x */ RES_DYNAMIC = 9, RES_Q75 = 10, RES_Q25 = 11, RES_Q50 = 12 };
@@ -52,6 +53,10 @@ typedef struct {
     int hearts;          // index into g_heart_colours (0 = Default red)
     char rando_seed[128];  // active randomizer seed (rando/<name>/), empty = vanilla
 } Settings;
+
+// (PVRecomp) Safe start (settings.c): armed at load and after menu changes, cleared after the game runs a while.
+void settings_arm_check(void);
+void settings_frame(uint64_t frame);  // per presented frame
 
 enum { N_TUNIC_COLOURS = 13, N_HEART_COLOURS = 9 };
 extern const char *const g_tunic_colours[N_TUNIC_COLOURS];
