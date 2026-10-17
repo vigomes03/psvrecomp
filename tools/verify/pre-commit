@@ -9,6 +9,6 @@ python tools/verify/gates.py lint --staged || {
   exit 1
 }
 # Private content must never be staged.
-if git diff --cached --name-only | grep -E '^(roms|dumps|keys|lab|Pokémon Violet|Pokemon Violet)/|\.(nca|nsp|xci|keys)$'; then
+if git diff --cached --name-only | grep -E '^(roms|dumps|keys|lab|Pokémon Violet|Pokemon Violet)/|\.(nca|nsp|xci|keys)$' | grep -vFx 'roms/.gitkeep'; then
   echo "pre-commit: private game/key content staged"; exit 1
 fi

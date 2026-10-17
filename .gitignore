@@ -7,7 +7,9 @@
 /ref/
 
 # ── Conteúdo PRIVADO: ROMs/dumps do seu Switch (nunca commitar, nunca publicar) ──
-/roms/
+# Mantemos só o marcador vazio para a pasta existir no clone; todo o conteúdo continua ignorado.
+/roms/*
+!/roms/.gitkeep
 # Nomes antigos: manter ignorados para não vazar uma cópia que ainda esteja sendo movida.
 /Pokémon Violet/
 /Pokemon Violet/
