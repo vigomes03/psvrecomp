@@ -9,6 +9,7 @@
 #include <io.h>
 
 #include "../platform.h"
+#include "windows_fault_context.h"
 
 // ---- guest address space
 // The window is reserved up front and committed per region (plat_commit from the loader / kernel). Anything
@@ -402,14 +403,16 @@ void plat_print_backtrace(void) {
 
 static LONG WINAPI unhandled_filter(EXCEPTION_POINTERS *ep) {
     EXCEPTION_RECORD *er = ep->ExceptionRecord;
+    pvr_print_windows_fault_context(stderr, er, ep->ContextRecord);
     uint64_t fa = er->NumberParameters >= 2 ? er->ExceptionInformation[1] : 0;
     char what[48];
     snprintf(what, sizeof what, "exception %08lx", er->ExceptionCode);
     // x64 has no link register: report the return address on top of the stack (valid at function entry).
     uint64_t lr = 0;
-    MEMORY_BASIC_INFORMATION mi;
-    if (VirtualQuery((void *)(uintptr_t)ep->ContextRecord->Rsp, &mi, sizeof mi) && mi.State == MEM_COMMIT)
-        lr = *(uint64_t *)(uintptr_t)ep->ContextRecord->Rsp;
+    SIZE_T got = 0;
+    if (!ReadProcessMemory(GetCurrentProcess(), (const void *)(uintptr_t)ep->ContextRecord->Rsp,
+                           &lr, sizeof lr, &got) || got != sizeof lr)
+        lr = 0;  // unreadable saved stack: do not fault again while reporting
     rt_fault_report(what, fa, ep->ContextRecord->Rip, lr);
 }
 

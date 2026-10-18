@@ -127,13 +127,47 @@ def dirs(a):
     return (GENFULL, HOST) if v == "base" else (LAB / f"gen-{v}", LAB / f"host-{v}")
 
 
+def runtime_source_manifest():
+    """Fingerprint owned runtime inputs, not merely the output timestamp."""
+    files = [RECOMP / "build_host.sh"]
+    for folder in (PD / "runtime", PD / "third_party" / "imgui"):
+        files.extend(p for p in folder.rglob("*") if p.suffix in (".c", ".cpp", ".h", ".inc"))
+    vma = ROOT / "ref/LASRecomp-main/LASRecomp-main/runtime/nvn/vulkan/vma.cpp"
+    if vma.is_file():
+        files.append(vma)
+    return {mpath(p.relative_to(ROOT)): sha256(p) for p in sorted(set(files)) if p.is_file()}
+
+
+def host_build_provenance(host, records=None):
+    """Return the matching Vulkan build run id, or reject unknown/stale inputs."""
+    exe = Path(host) / "pvhost.exe"
+    if not exe.is_file():
+        return None
+    current, binary_hash = runtime_source_manifest(), sha256(exe)
+    key = mpath(exe.relative_to(ROOT))
+    records = list(known_runs().values()) if records is None else list(records)
+    for record in reversed(records):
+        info = record.get("info", {})
+        artifact = record.get("artifacts", {}).get(key, {})
+        if (record.get("gate") == "host" and record.get("pass") and info.get("backend") == "vulkan"
+                and artifact.get("sha256") == binary_hash and info.get("runtime_sources") == current):
+            return record["run_id"]
+    return None
+
+
 def g_host(g, a):
     GENFULL, HOST = dirs(a)
+    backend = getattr(a, "backend", "null")
+    if backend == "vulkan":
+        HOST = LAB / "host-vk-auto"
+    g.info.update(backend=backend, version=a.version, host_dir=mpath(HOST),
+                  runtime_sources=runtime_source_manifest())
     HOST.mkdir(parents=True, exist_ok=True)
     for f in ["pvhost.exe", "pvhost.dll.a"]:
         (HOST / f).unlink(missing_ok=True)
-    code, out = sh(f'bash build_host.sh "{bpath(HOST)}"', cwd=RECOMP, timeout=1200)
+    code, out = sh(f'bash build_host.sh "{bpath(HOST)}" {backend}', cwd=RECOMP, timeout=1200)
     g.out = out
+    g.check("runtime sources unchanged during build", g.info["runtime_sources"] == runtime_source_manifest())
     g.check("build_host.sh exit 0", code == 0, f"exit {code}")
     g.check("no compiler errors", " error: " not in out and "error generated" not in out,
             "\n".join(l for l in out.splitlines() if "error" in l)[:300])
@@ -143,6 +177,10 @@ def g_host(g, a):
 
 def g_link(g, a):
     GENFULL, HOST = dirs(a)
+    backend = getattr(a, "backend", "null")
+    if backend == "vulkan":
+        HOST = LAB / "host-vk-auto"
+    g.info.update(backend=backend, version=a.version, host_dir=mpath(HOST))
     (HOST / "pvgame.dll").unlink(missing_ok=True)
     objs = {d: len(list((GENFULL / d).glob("*.o"))) for d in ["obj", "obj_subsdk0", "obj_sdk"]}
     g.info["objs"] = objs
@@ -151,7 +189,7 @@ def g_link(g, a):
     # run_boot.sh links then boots; link-only: run with 0 s and ignore the boot part.
     code, out = sh(f'bash run_boot.sh "{bpath(GENFULL)}" "{bpath(HOST)}" 1 {a.version}', cwd=RECOMP, timeout=3600)
     g.out = out
-    g.check("pvgame.dll produced", g.artifact(HOST / "pvgame.dll", hash_it=False), out[-300:])
+    g.check("pvgame.dll produced", g.artifact(HOST / "pvgame.dll"), out[-300:])
     if (HOST / "pvgame.dll").exists():
         g.check("pvgame.dll > 100 MB", (HOST / "pvgame.dll").stat().st_size > 100 << 20)
         code, nm = sh(f'/d/msys64/ucrt64/bin/objdump -p "{mpath(HOST / "pvgame.dll")}" | grep -c pvgame_tables')
@@ -340,29 +378,196 @@ def g_regions(g, a):
     g.check("test prints W08 PASS", code == 0 and "W08 PASS" in o, o.strip()[-500:])
 
 
+def save_manifest(folder):
+    """Hashes only: no save contents enter evidence records."""
+    folder = Path(folder)
+    if not folder.is_dir() or folder.is_symlink() or folder.is_junction():
+        raise ValueError("save source must be a real directory")
+    result = {}
+    for path in sorted(folder.rglob("*")):
+        if path.is_symlink() or path.is_junction():
+            raise ValueError("linked save entries are not supported")
+        if path.is_file():
+            result[path.relative_to(folder).as_posix()] = sha256(path)
+    return result
+
+
+def prepare_window_save(source, target):
+    """Prepare an expendable copy. Never delete source or a related directory."""
+    target = Path(target)
+    lab = (ROOT / "lab").resolve()
+    resolved = target.resolve()
+    if resolved == lab or not resolved.is_relative_to(lab):
+        raise ValueError("save sandbox must be below the project lab directory")
+    if target.is_symlink() or target.is_junction():
+        raise ValueError("save sandbox cannot be a link or junction")
+    source = Path(source).resolve() if source else None
+    if source and (source == resolved or source in resolved.parents or resolved in source.parents):
+        raise ValueError("save source and sandbox paths must be disjoint")
+    before = save_manifest(source) if source else {}
+    staging = target.with_name(f".{target.name}.copy-{uuid.uuid4().hex}")
+    try:
+        if source:
+            shutil.copytree(source, staging)
+        else:
+            staging.mkdir(parents=True)
+        if save_manifest(staging) != before:
+            raise ValueError("save copy does not match the source manifest")
+        if target.exists():
+            shutil.rmtree(target)
+        staging.rename(target)
+    finally:
+        if staging.exists():
+            shutil.rmtree(staging)
+    return before
+
+
+def g_save_safety(g, a):
+    """Test backup recovery on synthetic data and a private disposable save copy."""
+    code, out = sh(f'"{mpath(sys.executable)}" "{mpath(ROOT / "tools/verify/test_save_safety.py")}" -v', cwd=ROOT)
+    g.out = out
+    g.check("save isolation regression suite", code == 0 and "Ran 4 tests" in out and "OK" in out, out[-300:])
+    g.info.update(scope="copied-save backup/recovery; not guest atomic Commit")
+    if not a.save:
+        g.check("explicit source save supplied", False, "use --save with a seed directory")
+        return
+    folder = LAB / "save-safety" / uuid.uuid4().hex[:10]
+    folder.mkdir(parents=True)
+    backup, sandbox = folder / "backup", folder / "sandbox"
+    try:
+        before = prepare_window_save(a.save, backup)
+        g.check("nonempty seed manifest", bool(before))
+        if not before:
+            return
+        prepare_window_save(backup, sandbox)
+        g.check("initial copy matches seed", save_manifest(sandbox) == before)
+        expendable = sandbox / next(iter(before))
+        expendable.write_bytes(b"interrupted-expendable-copy")
+        g.check("copy corruption detected", save_manifest(sandbox) != before)
+        prepare_window_save(backup, sandbox)
+        g.check("restore matches backup", save_manifest(sandbox) == before)
+        g.check("original seed unchanged", save_manifest(a.save) == before)
+        g.info.update(source=mpath(Path(a.save)), source_manifest=before,
+                      backup=mpath(backup), restored_sandbox=mpath(sandbox))
+    except (OSError, ValueError) as exc:
+        g.check("save recovery experiment", False, str(exc))
+
+
+def g_save_interruption(g, a):
+    """One real guest write, deliberate exit before Flush/Commit, then verified backup restoration."""
+    if not g.check("explicit source save supplied", bool(a.save)):
+        return
+    if not g.check("explicit save input scenario supplied", bool(a.input_script)):
+        return
+    if not g.check("interruption target is v400", a.version == "v400"):
+        return
+    host = LAB / "host-vk-auto"
+    build_run = host_build_provenance(host)
+    if not g.check("current-source Vulkan build", bool(build_run), build_run or "rebuild Vulkan host/link"):
+        return
+    for name in ("pvhost.exe", "pvgame.dll"):
+        if not g.check(f"interruption input {name}", g.artifact(host / name)):
+            return
+    code, out = sh(f'"{mpath(sys.executable)}" "{mpath(ROOT / "tools/verify/test_save_fault.py")}" -v', cwd=ROOT)
+    if not g.check("native fault positive and negative controls", code == 0, out[-400:]):
+        return
+    folder = LAB / "save-interruption" / uuid.uuid4().hex[:10]
+    folder.mkdir(parents=True)
+    backup, sandbox, log = folder / "backup", folder / "sandbox", folder / "guest.log"
+    before = prepare_window_save(a.save, backup)
+    if not g.check("nonempty source manifest", bool(before)):
+        return
+    prepare_window_save(backup, sandbox)
+    env = window_environment(host, sandbox, a.input_script)
+    env.update(PVR_TEST_SAVE_AFTER_WRITE="1", LARECOMP_TRACE_SAVE="1", PVR_RUN_SECONDS="60",
+               PVR_DISPLAY="2", SDL_AUDIO_DRIVER="dummy", PVR_SYSFONT_DIR=mpath(LAB / "sysfont"),
+               LARECOMP_SCREENSHOT_EVERY="999999", LARECOMP_SCREENSHOT_FROM="999999",
+               LARECOMP_SETTINGS=mpath(folder / "test-settings.ini"))
+    env["PATH"] = r"D:\msys64\ucrt64\bin" + os.pathsep + env.get("PATH", "")
+    g.info.update(scope="guest exit after accepted write, before Flush/Commit; not power-loss atomicity",
+                  version="v400", backend="vulkan", host_build_run_id=build_run,
+                  source=mpath(Path(a.save)), source_manifest=before, input_script=a.input_script,
+                  backup=mpath(backup), restored_sandbox=mpath(sandbox), attempts=1)
+    try:
+        with log.open("wb") as output:
+            child = subprocess.run([str(host / "pvhost.exe"), str(ROOT / "dumps/v400/exefs"),
+                                    str(ROOT / "dumps/v400/romfs")], cwd=host, env=env,
+                                   stdout=output, stderr=subprocess.STDOUT, timeout=120)
+        text = log.read_text(encoding="utf-8", errors="replace")
+        marker = "[save-test] after write before Flush/Commit"
+        g.info.update(child_exit=child.returncode, interrupted_manifest=save_manifest(sandbox))
+        g.check("guest exited at deliberate fault boundary", child.returncode == 86, str(child.returncode))
+        g.check("exact fault marker observed once", text.count(marker) == 1)
+        g.check("actual guest write observed", "[save] write " in text)
+        g.check("Flush/Commit not reached", "[save] flush " not in text and "[save] commit " not in text)
+        g.check("no unrelated fatal/host exception", "FATAL" not in text and "exception c0000005" not in text)
+        g.out = f"single guest exit={child.returncode}; fault marker count={text.count(marker)}"
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        g.check("single interruption experiment returned", False, str(exc))
+    finally:
+        if log.exists():
+            g.artifact(log)
+        prepare_window_save(backup, sandbox)
+        g.check("restoration matches immutable backup", save_manifest(sandbox) == before)
+        after = save_manifest(a.save)
+        g.info.update(source_manifest_after=after)
+        g.check("source save unchanged", after == before)
+
+
+def window_environment(host, save, input_script=None):
+    env = dict(os.environ)
+    for key in ("PVR_FRAMEPACE", "PVR_FPS_CAP", "PVR_GAME60", "SAVE_SEED", "PVR_INPUT", "PVR_AUTOPRESS", "PVR_TEST_CRASH", "PVR_TEST_SAVE_AFTER_WRITE"):
+        env.pop(key, None)
+    env.update(PVR_HOST_DIR=bpath(host), LARECOMP_SAVE_DIR=mpath(save),
+               LARECOMP_SETTINGS="build/psvrecomp_auto.ini",
+               LARECOMP_SCREENSHOT_EVERY="150", LARECOMP_SCREENSHOT_FROM="150")
+    if input_script:
+        env.update(PVR_INPUT=input_script, PVR_AUTOPRESS="A:1000000:100:999999")
+    return env
+
+
 def g_window(g, a):
-    """M3-M5 in the window build (lab/host-vk: Vulkan, v4.0.0, paced at the game's 30 fps): a NEW game from an empty
+    """M3-M5 in the isolated window build (lab/host-vk-auto: Vulkan, v4.0.0, paced at the game's 30 fps): a NEW game from an empty
     save with run_auto.sh's scripted input (A every second). Checks, all on the first try (no crash retries):
       no FATAL / host exception; presented frames ~ 30 fps over the run; screenshots are rendered scenes (lit, many
       colours: M3 first frame / M4 3D); the scene changes during the run (the game advances with the input: M5);
       the last 10 s frametime windows hold >= 27 fps."""
     sys.path.insert(0, str(ROOT / "tools" / "verify"))
     import frame_stats
-    H = LAB / "host-vk"
+    H = LAB / "host-vk-auto"
+    g.info.update(version="v400", backend="vulkan")
+    for name in ("pvhost.exe", "pvgame.dll"):
+        if not g.check(f"window input {name} present", g.artifact(H / name), str(H / name)):
+            return
+    build_run = host_build_provenance(H)
+    if not g.check("Vulkan binary matches a current-source host gate", bool(build_run),
+                   build_run or "rebuild host --version v400 --backend vulkan"):
+        return
+    g.info.update(host_build_run_id=build_run)
     secs = max(a.seconds, 60)
     save = H / "save_gate"
-    shutil.rmtree(save, ignore_errors=True)
-    if a.save:  # --save <dir with save_0/...>: start from that save (M6: the open world) instead of a new game
-        shutil.copytree(a.save, save)
+    try:
+        source_manifest = prepare_window_save(a.save, save)
+    except (OSError, ValueError) as exc:
+        g.check("isolated save prepared", False, str(exc))
+        return
+    g.info.update(save_sandbox=mpath(save), source_manifest=source_manifest)
+    if a.save:
         g.info.update(save=str(a.save))
-    else:
-        save.mkdir(parents=True)
-    env = dict(os.environ)
-    for k in ("PVR_FRAMEPACE", "PVR_FPS_CAP", "PVR_GAME60", "SAVE_SEED", "PVR_INPUT", "PVR_AUTOPRESS", "PVR_TEST_CRASH"):
-        env.pop(k, None)  # (30 fps, default input, nothing provoked)
-    env.update(LARECOMP_SAVE_DIR=mpath(save), LARECOMP_SCREENSHOT_EVERY="150", LARECOMP_SCREENSHOT_FROM="150")
+    g.check("isolated save matches input", save_manifest(save) == source_manifest)
+    input_script = getattr(a, "input_script", None)
+    env = window_environment(H, save, input_script)
+    g.info.update(input_script=input_script)
     code, out = sh(f"bash tools/verify/run_auto.sh {secs} gate_window", cwd=ROOT, env=env, timeout=secs * 4 + 900)
     g.out += out
+    g.check("automatic window command exit 0", code == 0, f"exit {code}")
+    if a.save:
+        try:
+            after_manifest = save_manifest(a.save)
+            g.info.update(source_manifest_after=after_manifest)
+            g.check("original source save unchanged", after_manifest == source_manifest)
+        except (OSError, ValueError) as exc:
+            g.check("original source save unchanged", False, str(exc))
     log_p = H / "gate_window.log"
     if not g.check("gate_window.log written by this run", log_p.exists()):
         return
@@ -398,7 +603,7 @@ def g_window(g, a):
         g.artifact(H / "build" / "frames" / f[0])
 
 
-GATES = {"window": g_window, "dumps": g_dumps, "host": g_host, "link": g_link, "boot": g_boot, "simd": g_simd, "excl_pair": g_excl_pair, "nvn_null": g_nvn_null, "sdl_null": g_sdl_null, "pl": g_pl, "cmdbuf_split": g_cmdbuf_split, "regions": g_regions}
+GATES = {"save_interruption": g_save_interruption, "save_safety": g_save_safety, "window": g_window, "dumps": g_dumps, "host": g_host, "link": g_link, "boot": g_boot, "simd": g_simd, "excl_pair": g_excl_pair, "nvn_null": g_nvn_null, "sdl_null": g_sdl_null, "pl": g_pl, "cmdbuf_split": g_cmdbuf_split, "regions": g_regions}
 
 
 def run_gate(name, a):
@@ -591,8 +796,11 @@ def main():
         s.add_argument("--agent", default="claude", choices=["claude", "qwen", "user"])
         s.add_argument("--min-stage", help="stage, or comma list of stages that must all be reached: " + ", ".join(STAGE_NAMES))
         s.add_argument("--seconds", type=int, default=30)
+        s.add_argument("--input-script", help="window: explicit PVR_INPUT script, disables default periodic presses")
         s.add_argument("--repeat", type=int, default=1, help="boot: N runs, all must pass")
-        s.add_argument("--save", help="window: start from a copy of this save dir (default: new game, empty save)")
+        s.add_argument("--save", help="window/save_safety: source save directory (window default: empty new game)")
+        s.add_argument("--backend", choices=["null", "vulkan"], default="null",
+                       help="host/link: null uses versioned host; vulkan uses isolated lab/host-vk-auto")
         s.add_argument("--version", default="base", help="dump version: dumps/<version>, lab/gen-<version> (base = lab/genfull)")
         if n == "claim":
             s.add_argument("--text", required=True)

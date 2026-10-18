@@ -196,6 +196,27 @@ static void fill_one(uint8_t *s, uint32_t id, int64_t sampling, uint64_t buttons
     *(uint32_t *)(s + 32) = 1;  // IsConnected
 }
 
+// PVR_TRACE_INPUT_HISTORY=1 (opt-in, default off): does GetNpadState (single) vs GetNpadStates (batch) get
+// called, with what requested count and player id? Logs the first few calls plus any button change, capped so
+// per-frame polling cannot flood the log or skew timing.
+#define TRACE_INPUT_HISTORY_HEAD 20
+#define TRACE_INPUT_HISTORY_CAP 500
+static void trace_input_history(int batch, uint32_t id, int cnt, int64_t smp, uint64_t buttons) {
+    static _Atomic int enabled = -1;
+    int en = atomic_load(&enabled);
+    if (en < 0) { en = getenv("PVR_TRACE_INPUT_HISTORY") != NULL; atomic_store(&enabled, en); }
+    if (!en) return;
+    static _Atomic int logged;
+    static _Atomic uint64_t last_buttons[8];
+    if (atomic_load(&logged) >= TRACE_INPUT_HISTORY_CAP) return;
+    int head = atomic_load(&logged) < TRACE_INPUT_HISTORY_HEAD;
+    int changed = id < 8 && atomic_exchange(&last_buttons[id], buttons) != buttons;
+    if (!head && !changed) return;
+    atomic_fetch_add(&logged, 1);
+    LOG("[input-hist] %s id=%u req=%d smp=%lld buttons=%#llx\n", batch ? "batch" : "single", id, cnt,
+        (long long)smp, (unsigned long long)buttons);
+}
+
 static void fill_state(Cpu *c, int n) {
     uint8_t *s = (uint8_t *)(uintptr_t)c->x[0];
     uint32_t id = *(uint32_t *)(uintptr_t)c->x[n ? 2 : 1];
@@ -218,9 +239,10 @@ static void fill_state(Cpu *c, int n) {
         last_lx = host_lx; last_ly = host_ly;
         LOG("[input] t=%llu ms left stick %d %d\n", (unsigned long long)ms, (int)last_lx, (int)last_ly);
     }
-    if (!n) { fill_one(s, id, smp, b); return; }
+    if (!n) { fill_one(s, id, smp, b); trace_input_history(0, id, 1, smp, b); return; }
     int cnt = (int)c->x[1];  // GetNpadStates(out, count, id): newest first; we keep one sample, repeated
     for (int i = 0; i < cnt; i++) fill_one(s + 0x28 * i, id, smp - i, b);
+    trace_input_history(1, id, cnt, smp, b);
     c->x[0] = (uint64_t)(cnt > 0 ? cnt : 0);
 }
 

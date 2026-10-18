@@ -25,6 +25,10 @@ static inline bool SDL_InitSubSystem(uint32_t flags) {
     return false;
 }
 
+static inline const char *SDL_GetCurrentAudioDriver(void) {
+    return NULL;
+}
+
 static inline const char *SDL_GetError(void) {
     return "headless build: no audio device";
 }

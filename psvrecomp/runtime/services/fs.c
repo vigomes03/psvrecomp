@@ -10,6 +10,7 @@
 #include "../hle.h"
 #include "../rando.h"
 #include "../ipc.h"
+#include "../platform/save_test_fault.h"
 
 #define FS_PATH_NOT_FOUND MAKE_RESULT(2, 1)
 #define FS_PATH_EXISTS MAKE_RESULT(2, 2)
@@ -389,8 +390,8 @@ static Service *open_romfs_storage(void) {
 }
 
 // ------------------------------------------------------------------ host-directory filesystem
-typedef struct { char root[1024]; } HostFs;
-typedef struct { int fd; char path[1100]; } HostFile;
+typedef struct { char root[1024]; bool is_save; } HostFs;
+typedef struct { int fd; char path[1100]; bool is_save; } HostFile;
 typedef struct { DIR *d; char path[1024]; int mode; } HostDir;
 
 static const char *in_path(IpcReq *req, int i) {
@@ -418,8 +419,9 @@ static void file(Service *s, IpcReq *req, IpcResp *resp) {
         IpcBuf *b = out_buf(req, 0);
         if ((uint64_t)size > b->size) size = (int64_t)b->size;
         ssize_t n = pread(f->fd, (void *)(uintptr_t)b->addr, (size_t)size, off);
-        if (strstr(f->path, "savedata")) {
-            LOG("[save] read %s off %lld size %lld -> guest %llx\n", f->path, (long long)off, (long long)size, (unsigned long long)b->addr);
+        if (f->is_save) {
+            if (getenv("LARECOMP_TRACE_SAVE"))
+                LOG("[save] read %s off %lld size %lld -> guest %llx\n", f->path, (long long)off, (long long)size, (unsigned long long)b->addr);
             extern void save_editor_file_read(const char *path, uint64_t addr, int64_t off, int64_t size);
             save_editor_file_read(f->path, b->addr, off, n);
             extern void flags_ext_save_read(const char *path, uint64_t addr, int64_t off, int64_t size);
@@ -432,16 +434,20 @@ static void file(Service *s, IpcReq *req, IpcResp *resp) {
     case 1: {  // Write(option, offset, size) <- A
         int64_t off = IN(int64_t, 8), size = IN(int64_t, 16);
         IpcBuf *a = in_buf(req, 0);
-        if (strstr(f->path, "savedata"))
+        if (f->is_save && getenv("LARECOMP_TRACE_SAVE"))
             LOG("[save] write %s off %lld size %lld <- guest %llx\n", f->path, (long long)off, (long long)size, (unsigned long long)a->addr);
         if (pwrite(f->fd, (void *)(uintptr_t)a->addr, (size_t)size, off) < 0) resp->result = errno_result();
-        else if (strstr(f->path, "savedata")) {
+        else if (f->is_save) {
             extern void flags_ext_save_written(const char *path, uint64_t addr, int64_t off, int64_t size);
             flags_ext_save_written(f->path, a->addr, off, size);
+            save_test_after_write(f->is_save);
         }
         break;
     }
-    case 2: fsync(f->fd); break;
+    case 2:
+        if (f->is_save && getenv("LARECOMP_TRACE_SAVE")) LOG("[save] flush %s\n", f->path);
+        fsync(f->fd);
+        break;
     case 3: if (ftruncate(f->fd, IN(int64_t, 0))) resp->result = errno_result(); break;
     case 4: {
         struct stat sb;
@@ -524,18 +530,23 @@ static void filesystem(Service *s, IpcReq *req, IpcResp *resp) {
     host_path(fs, in_path(req, 0), p, sizeof p);
     switch (req->cmd) {
     case 0: {  // CreateFile(option, size)
+        if (fs->is_save && getenv("LARECOMP_TRACE_SAVE")) LOG("[save] create %s size %lld\n", p, (long long)IN(int64_t, 8));
         int fd = open(p, O_CREAT | O_EXCL | O_RDWR, 0644);
         if (fd < 0) { resp->result = errno_result(); break; }
         if (ftruncate(fd, IN(int64_t, 8))) resp->result = errno_result();
         close(fd);
         break;
     }
-    case 1: if (unlink(p)) resp->result = errno_result(); break;
+    case 1:
+        if (fs->is_save && getenv("LARECOMP_TRACE_SAVE")) LOG("[save] delete %s\n", p);
+        if (unlink(p)) resp->result = errno_result();
+        break;
     case 2: if (mkdir(p, 0755)) resp->result = errno_result(); break;
     case 3: if (rmdir(p)) resp->result = errno_result(); break;
     case 4: if (rm_rf(p, false)) resp->result = errno_result(); break;
     case 5: case 6:
         host_path(fs, in_path(req, 1), p2, sizeof p2);
+        if (fs->is_save && getenv("LARECOMP_TRACE_SAVE")) LOG("[save] rename %s -> %s\n", p, p2);
         if (rename(p, p2)) resp->result = errno_result();
         break;
     case 7: {  // GetEntryType
@@ -551,6 +562,7 @@ static void filesystem(Service *s, IpcReq *req, IpcResp *resp) {
         if (fd < 0) { resp->result = errno_result(); break; }
         HostFile *f = calloc(1, sizeof *f);
         f->fd = fd;
+        f->is_save = fs->is_save;
         strlcpy(f->path, p, sizeof f->path);
         ipc_return_object(resp, service_new("IFile", file, f));
         break;
@@ -565,7 +577,9 @@ static void filesystem(Service *s, IpcReq *req, IpcResp *resp) {
         ipc_return_object(resp, service_new("IDirectory", directory, hd));
         break;
     }
-    case 10: break;  // Commit
+    case 10:  // Commit
+        if (fs->is_save && getenv("LARECOMP_TRACE_SAVE")) LOG("[save] commit %s (no-op host handler)\n", fs->root);
+        break;
     case 11: case 12: OUT(int64_t, 0) = 0x40000000; resp_size(resp, 8); break;
     case 13: rm_rf(p, true); break;
     case 14: memset(resp->data, 0, 0x20); resp_size(resp, 0x20); break;
@@ -573,8 +587,9 @@ static void filesystem(Service *s, IpcReq *req, IpcResp *resp) {
     }
 }
 
-static Service *open_host_fs(const char *sub) {
+static Service *open_host_fs(const char *sub, bool is_save) {
     HostFs *fs = calloc(1, sizeof *fs);
+    fs->is_save = is_save;
     if (getenv("LARECOMP_SAVE_DIR")) g_save_dir = getenv("LARECOMP_SAVE_DIR");  // test runs use a scratch copy
     else if (rando_seed_dir()) {  // each randomizer seed has its own save slots
         static char seed_save[600];
@@ -596,13 +611,13 @@ SERVICE("fsp-srv", fsp_srv) {
     (void)s;
     switch (req->cmd) {
     case 1: break;  // SetCurrentProcess
-    case 18: ipc_return_object(resp, open_host_fs("sdcard")); break;
+    case 18: ipc_return_object(resp, open_host_fs("sdcard", false)); break;
     case 22: break;  // CreateSaveDataFileSystem
     case 51: case 53: {  // OpenSaveDataFileSystem(space, attribute)
         uint8_t type = IN(uint8_t, 0x8 + 0x18);  // attribute.type
         char sub[64];
         snprintf(sub, sizeof sub, "save_%u", type);
-        ipc_return_object(resp, open_host_fs(sub));
+        ipc_return_object(resp, open_host_fs(sub, true));
         break;
     }
     case 200: ipc_return_object(resp, open_romfs_storage()); break;  // OpenDataStorageByCurrentProcess
