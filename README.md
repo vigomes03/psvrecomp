@@ -29,7 +29,7 @@ The [active roadmap](docs/roadmap/README.md) separates established historical re
 open acceptance tasks. Revision: 2026-10-17; no runtime experiment was rerun for this documentation rewrite.
 - Historical v4.0.0 headless frame/time-limit evidence: run_id=7adc0390c2.
 - Historical 600-second copied-save open-world route: run_id=c6a80b10d8; not full-game stability.
-- The latest recorded headless host build failed: run_id=648a2fa61b; fresh baseline is the next task.
+- Fresh headless host and two frame/time-limit boots: run_id=69f115de36 and run_id=8e0e7bcf37; earlier failure retained in the ledger.
 - Overlay/ini/safe-start observations exist; launcher and full app acceptance remain open.
 - The focused study path is archive/scene tracing followed by a reversible custom-platform experiment.
 - The old roadmap is [archived](docs/roadmap/archive/README.md), not another active work queue.

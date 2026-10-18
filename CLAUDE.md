@@ -14,8 +14,9 @@
 
 ## 1. Roles: Claude orchestrates, local models execute
 
-**Claude is the conductor, not the executor.** All execution work goes to local models
-(Ollama, `devstral:24b` by default). Claude:
+**Claude is the conductor.** Delegate bounded tasks only when the local worker is suitable
+(Ollama, `qwen3.8:27b` by default). Keep difficult diagnosis, architecture and acceptance with Claude.
+The user selected Qwen for suitable tasks, not unrestricted delegation. Claude:
 - understands the request, breaks it into **small and verifiable cards**, chooses tool and model;
 - dispatches cards and **verifies** each delivery against real evidence;
 - accepts, returns with exact errors (maximum 3 attempts) or escalates;
@@ -134,14 +135,20 @@ D:\Dev\REA\
 Heavy tools outside repo: `D:\Tools` (Ghidra, JDK, MinGW), `D:\msys64`.
 
 ## 7. Machine resources (RTX 3070 Ti 8 GB / 32 GB RAM)
-- `devstral:24b` (24B dense, 14 GB weights, ctx up to 131072) runs mostly on CPU with offload (~26 GB RAM at full ctx,
-  ~5 tok/s): **one model at a time**, workers **sequential**; pass a small `--num-ctx` when the card allows it.
-  `qwen3.8:27b` is the only other local model (also the Hermes fallback).
+- `qwen3.8:27b` is the selected project worker for suitable bounded tasks. It is dense, with about 17 GB of weights
+  plus context memory: **one model at a time**, workers **sequential**. Pass a small explicit `--num-ctx` for short
+  cards, disable thinking for bounded generation, and check available RAM before loading. Do not change Hermes
+  fallback/delegation settings or other projects as part of a project worker selection.
 - Ghidra/REA + qwen at the same time is the limit: close heavy Unity/Chrome before large batches.
-- `ollama stop devstral:24b` after each batch.
+- `ollama stop qwen3.8:27b` after each batch; verify memory release before starting a game run.
 - C: has ~16 GB free: all downloads/cache/installations go to D:.
 
 ## 8. Environment and commands (details in `docs/environment.md`)
+- Explicit user authorization: read files and execute the existing Ghidra installation at
+  `D:/Tools/ghidra_12.1.4_PUBLIC`. Do not edit, install or upgrade anything there. Keep scripts, fixtures,
+  analysis projects and reports inside `D:/Dev/REA`. This does not grant access to other tool folders/projects.
+  For delegated CLI sessions, add only that exact installation directory and retain write/edit deny rules for it;
+  do not disable permission checks or change global agent settings.
 - REA: `bash tools/rea/rea.sh <cmd> '<target>'` (lean output; `REA_RAW=1` for full envelope).
 - MCP `rea` in Hermes: 21 filtered tools (for Claude; not for qwen).
 - Native compilation: `export PATH="/d/msys64/ucrt64/bin:/d/msys64/usr/bin:$PATH"` **only in command**, never persist

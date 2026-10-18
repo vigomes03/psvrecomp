@@ -56,6 +56,7 @@ python tools/verify/gates.py run host --version v400
 ## Diagnostic tools (environment variables, all off by default)
 | Variable | What it does |
 |---|---|
+| `LARECOMP_TRACE_SAVE=1` | Opt-in host save-mount create/read/write/flush/rename/commit trace. Rebuild the Vulkan host before use; this is not an atomic-save implementation. |
 | `LARECOMP_DEBUG_FRAME=<n>` / `PVR_DEBUG_ON=<w>x<h>/<fmt>` / `PVR_DEBUG_ON_COPY=<w>x<h>` | lists every draw of a frame (by number, or triggered when the scene uses a given texture/copy) and saves each pass |
 | `PVR_DIAG_SAVETEX=<w>` + `PVR_DIAG_SAVETEX_FS=<fs>` | saves the textures read by a shader's draws |
 | `PVR_DBG_FS=<fs,...>` `PVR_DBG_PC` `PVR_DBG_REG` `PVR_DBG_RT` (+`SIGNED/FRACT/UINT`) | paints shader output white or shows a register |

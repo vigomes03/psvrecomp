@@ -32,9 +32,20 @@ a no-op Commit at `fs.c:568`, disk-cache code at `runtime/nvn/vulkan/device.c:22
 `runtime/fnprof.c` and `recomp/sym.py`. Line numbers are audit references and may move after later edits.
 Presence of source is not evidence that every intended path is used or correct.
 
-## Blocking and misleading records
+## Fresh execution
 
-- **Latest recorded host failure:** run_id=648a2fa61b, 2026-10-16. Build exit 1 with undeclared
+See [execution notes](execution-2026-10-17.md): headless failure reproduced as run_id=5bca0b86c4 (FAIL),
+then shim check run_id=dc8810b71b and host run_id=69f115de36; two 60-second boots run_id=8e0e7bcf37.
+New-game metric run_id=18c9b702ee and backup/recovery run_id=e51fe74c5b have limited scopes;
+the isolated restored-copy route has run_id=49191e3f3a with source manifests unchanged.
+Those earlier records alone do not establish fresh guest writes. The later B-04 chain adds actual write run_id=f933f43273,
+new-save backup/recovery run_id=4ec8dcdc29 and reload run_id=a9bef169e1, deliberate write-boundary interruption
+run_id=7ea127f858 and post-restoration reload run_id=d6946b460e. The [recovery policy](../save-recovery-policy.md)
+states the bounded guarantee, not atomic Commit or hardware power-loss durability. B-03 was closed on the current build's fresh gates plus explicit user confirmation.
+
+## Historical failures and misleading records
+
+- **Historical host failure:** run_id=648a2fa61b, 2026-10-16. Build exit 1 with undeclared
   `SDL_GetCurrentAudioDriver` at `audio.c:943`; B-01 owns reproduction. This is not evidence of a failed Vulkan run.
 - **Do not use early PASS as full boot:** run_id=990a33212b reached `init_sdk` but recorded c0000005 at 0x20.
   Its 227,207-function report does not prove the old 271,027-function claim. Later E-02 is the frame-path evidence.

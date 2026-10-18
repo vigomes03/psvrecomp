@@ -9,7 +9,7 @@ Failed chunks are retried with the exact errors (max 3 attempts), then kept verb
 Claude finishes them. Output goes to --out; nothing is written over the source unless --out points at it.
 
 Usage:
-  python tools/workers/translate_worker.py --src docs/x.md --out lab/translate/docs/x.md [--model devstral:24b]
+  python tools/workers/translate_worker.py --src docs/x.md --out lab/translate/docs/x.md [--model qwen3.8:27b]
 Prints one JSON line: chunks, translated, failed (with line ranges and last errors), seconds.
 """
 import argparse, json, re, sys, time, urllib.request
@@ -149,7 +149,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--model", default="devstral:24b")
+    ap.add_argument("--model", default="qwen3.8:27b")
     ap.add_argument("--num-ctx", type=int, default=16384)
     ap.add_argument("--host", default="http://127.0.0.1:11434")
     ap.add_argument("--tries", type=int, default=3)

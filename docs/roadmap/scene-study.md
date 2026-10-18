@@ -14,6 +14,23 @@ Create a names table only for confirmed discoveries. No automatic import of ever
 **Acceptance:** a reproducible analysis entry, resource/time observations and at least one reviewed real call chain.
 **Old scope:** 0.3, 7.1/7.2/7.5-7.9, narrow loader/thread portion of 9.1. Generic harness existence is not this result.
 
+**Tooling progress (not milestone acceptance):** the installed direct-Ghidra helper now passes six synthetic
+controls, including an assembler-verified BL/target/function, non-call rejection and bounded owned-JVM timeout.
+See [reproducible procedure](../../tools/analysis/README.md) and the W30 evidence in
+[execution notes](execution-2026-10-17.md). The synthetic controls are not an observed guest call chain.
+[W31 crash correlation](crash-triage-2026-10-18.md) subsequently bound a concrete caller/callee pair using runtime
+stack/return metadata, native symbols and a version-bound Capstone decode. That does not establish the required
+Ghidra/private-function analysis, semantic roles or a scene-resource path; R-01 remains unchecked.
+
+[W34 scoped real-image entry](scoped-analysis-2026-10-18.md) subsequently verified the same direct call with
+Ghidra and emitted two local candidate decompilations. The caller has warnings and entry-based CFG did not reach
+the observed call site; explicit seeding is not full flow/boundary recovery. Semantic roles and private-output
+review remain pending. No original source reconstruction or scene-load chain is claimed.
+
+**Selected reference adaptation:** [REF-04](reference-adaptations.md) extends the existing profiler with
+first-entry/caller observations and baseline/event comparison. Prefer this bounded tool before a general hook
+registry; candidate functions still need reviewed evidence for the R-01 call chain.
+
 ## R-02 — Archive/index access and read trace
 
 - [ ] Locate the package lookup/decompression boundary, trace outer reads and determine whether an inner-resource
@@ -26,6 +43,10 @@ Do not promise that a RomFS file replacement substitutes an inner asset hash.
 synthetic fixtures, and comparison of selected parser results with actual game requests. Any unknown hash/path
 relationship is stated. Extracted bytes and raw reports remain private/ignored.
 **Old scope:** 3.5 + package part of 9.3 + 10.1.1/10.1.3 + 10.2.1. One shared deliverable, not three parsers.
+
+**Selected reference adaptation:** [REF-06](reference-adaptations.md) provides a read-only inventory/dependency
+report pattern shared with R-04. The archive parser is specific to our observed inputs; Unity bundles/GUIDs and
+an outer RomFS replacement do not establish the inner-resource format.
 
 ## R-03 — Small-scene loading experiment
 

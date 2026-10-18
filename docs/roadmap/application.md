@@ -14,6 +14,10 @@ Split dump selection/provenance from optional generation/compilation progress UI
 settings survive restart. Setup/generation progress has its own real test before being claimed.
 **Old scope:** 8.1. Launcher remains an app deliverable, not a prerequisite to an instrumented map experiment.
 
+**Selected follow-ups:** [REF-02 and REF-05](reference-adaptations.md) cover generated-DLL identity and a
+resumable gate-backed setup queue. They extend the existing launcher/provenance paths; no new baseline blocker
+or implicit closure of A-01 is introduced.
+
 ## A-02 — Menu, input and safe start
 
 - [ ] Validate existing navigation, input capture, save/reload and crash-recovery behavior using a documented matrix.
@@ -23,6 +27,10 @@ Record a missing controller test as blocked, not a keyboard substitute. Preserve
 **Acceptance:** menu does not leak game input; options persist; safe-start sentinel/recovery behaves as specified;
 controller result is explicit. Any discovered implementation gap becomes a separate fix card.
 **Old scope:** 5.2, 8.2; account/focus subtasks overlap 5.5 but do not close every applet service.
+
+**Selected follow-ups:** [REF-01 and REF-03](reference-adaptations.md) cover scripted-input isolation and optional
+verified save checkpoints. Retain current manual controls and copied-save protection. Checkpoints are a follow-up
+layer, not a replacement for baseline recovery tests or a claim of atomic Commit.
 
 ## A-03 — Video options
 

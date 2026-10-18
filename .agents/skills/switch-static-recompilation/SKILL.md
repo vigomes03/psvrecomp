@@ -42,17 +42,17 @@ ROMs, keys, firmware, or game assets.
 - Keep the manual save in `lab/host-vk/save` separate from pipeline saves.
   Automated runs use their isolated `save_auto` directory and a `SAVE_SEED`.
 
-## Root Shortcuts
+## Shortcuts in scripts/
 
 | Command | Purpose |
 |---|---|
-| `extract_base.cmd` | Extract the base XCI into `dumps/base/`. |
-| `extract_update_v400.cmd` | Apply the v4.0.0 update into `dumps/v400/`. |
-| `recompile_v400.cmd` | Generate C and compile v4.0.0 modules into `lab/gen-v400/`. |
-| `build_and_test_v400.cmd` | Build and boot-test an isolated Vulkan host. |
-| `launch_game.cmd` | Delegate to the canonical manual-play launcher. |
+| `scripts\extract_base.cmd` | Extract the base XCI into `dumps/base/`. |
+| `scripts\extract_update_v400.cmd` | Apply the v4.0.0 update into `dumps/v400/`. |
+| `scripts\recompile_v400.cmd` | Generate C and compile v4.0.0 modules into `lab/gen-v400/`. |
+| `scripts\build_and_test_v400.cmd` | Build and boot-test an isolated Vulkan host. |
+| `scripts\launch_game.cmd` | Delegate to the canonical manual-play launcher. |
 
-Every root shortcut provides `--help`, checks prerequisites, and must preserve
+Every scripts/ shortcut provides `--help`, checks prerequisites, and must preserve
 its nonzero child exit code. Windows `.cmd` files use CRLF endings.
 
 ## Procedure
@@ -61,11 +61,11 @@ its nonzero child exit code. Windows `.cmd` files use CRLF endings.
    the source/launcher being changed. Confirm no `pvhost.exe` instance owns the
    target output or save. Completion criterion: the changed path, build target,
    and validation gate are known.
-2. **Extract without disclosure.** Use the root extraction shortcuts. Let their
+2. **Extract without disclosure.** Use the scripts/ extraction shortcuts. Let their
    private logs remain outside Git; do not print or preserve key-bearing output.
    Completion criterion: the expected extracted layout exists and the dumps gate
    passes for the selected version.
-3. **Generate and compile.** Use `recompile_v400.cmd` for full regeneration or
+3. **Generate and compile.** Use `scripts\recompile_v400.cmd` for full regeneration or
    the canonical recomp scripts for targeted changes. Completion criterion: all
    expected object directories are produced without ignored error logs.
 4. **Build and link in isolation.** Use an isolated host directory for automatic
@@ -103,6 +103,20 @@ its nonzero child exit code. Windows `.cmd` files use CRLF endings.
 - A window capture or shader A/B is only evidence when the same scene and
   controlled input/save are used on both sides.
 
+## Gate isolation and save recovery
+
+- `gates.py run host --version v400 --backend vulkan` and the corresponding `link` gate target
+  `lab/host-vk-auto`; the null backend keeps `lab/host-v400`. Window acceptance uses the isolated Vulkan host.
+- A source save and an expendable sandbox must be disjoint; reject equal/nested paths and missing inputs before
+  deleting anything. Verify the staged copy and record source hashes before/after the run.
+- Demonstrate backup restoration on expendable copies. Do not call a backup policy an atomic guest Commit.
+- A null-host build cannot validate Vulkan instrumentation. Require matching output hash and current runtime/header
+  source manifests before window runs; retain stale-binary rejection as evidence.
+- A print-mode coding agent must not promise to resume its own background test after exiting. The parent must own
+  a tracked continuation, inspect the actual result and verify which binary/source version was exercised.
+- Headless shims must track SDL entry points used even by logging paths; add a no-device assertion and rerun
+  the shim and real host gates instead of hiding the diagnostic call.
+
 ## Pitfalls
 
 - `build_host.sh <out>` without `vulkan` builds the null backend.
@@ -115,6 +129,32 @@ its nonzero child exit code. Windows `.cmd` files use CRLF endings.
   classify each crash by its first fatal or device-fault line.
 - Never declare a visual defect fixed from a build or boot gate alone; require a
   same-scene render measurement or a user-confirmed manual observation.
+
+## Crash-metadata triage
+
+- Bind the executed host/DLL hashes to the failed run before symbolizing. Check both the nearest symbol and
+  the next text-symbol boundary; a stale binary or an unbounded lookup invalidates the function attribution.
+- Use the existing recomp/venv interpreter for LZ4/Capstone tools. Do not install packages globally just because
+  the desktop interpreter lacks the project dependencies. Hash-compare a reused flat image with Nso.image.
+- Correlate a stored guest LR minus four with the actual decoded direct target and the next native frame before
+  naming a caller/callee pair. Keep native/guest metadata distinct; this does not identify the optimized guest
+  fault instruction, prove register freshness, or assign engine semantics to anonymous symbols.
+- Keep short diagnostic replays single-attempt with copied binaries/settings/saves and retained logs. A clean
+  short run does not erase a prior failing gate. Never replace a missing reproduction with a speculative null guard.
+
+- For Windows fault diagnosis, emit the supplied native CONTEXT before any best-effort stack read or terminal
+  report. Test actual read/write/execute exceptions through the production filter, plus a silent normal path and
+  hook-removal control; helper presence alone does not prove integration.
+- Do not trust MEM_COMMIT as proof that saved RSP is readable. Require a full-size safe same-process copy before
+  using its stack-top heuristic, and keep real NOACCESS/GUARD/cross-page regression controls. A reporter fix is not
+  a fix for the original game fault; rebuild the tested backend after instrumentation changes.
+
+- For scoped Ghidra work, validate on an ABI-correct owned fixture first. Treat compiled-symbol intervals as
+  candidate bounds, not recovered canonical functions. Record actual database counts; an expected count is not
+  a measurement. Keep broad analysis off and preserve private pseudocode only under ignored lab/.
+- Entry-based disassembly may miss a runtime-observed interior call. Seed only the verified site within its
+  budget, and retain the separate entry-flow flag; explicit seeding does not prove reachability or source fidelity.
+  Keep full private failures local because executor exceptions can contain native logs.
 
 ## Verification
 

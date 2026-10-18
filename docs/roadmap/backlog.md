@@ -20,6 +20,21 @@ Promote one bounded card when it blocks the chosen slice or the user selects it.
 | L-10 | Later proposal | Full engine/job/heaps, world grid/LOD, all formats/render passes, battle/AI/Terastal/spawn/day-night, complete middleware and Zelda comparison; 9.1-9.7 beyond R | Reviewed descriptive notes with actual sources/build ids and bounded questions; discovered facts vs hypotheses clearly separated |
 | L-11 | Later proposal | Independent scene registration/warp, JSON generator/exporters, validation, open-world cell; 10.5.1-10.5.3, 10.6.1-10.6.3, 10.7.1/10.7.2 | C slice first, then separate evidence for registration, generated formats and unload/reload/LOD neighbors; no assumption of a regular grid |
 
+## Reference-backed follow-ups and future troubleshooting
+
+The canonical [REF-01 through REF-06 checklist](reference-adaptations.md) is planned scope, not a second set of
+L checkboxes. Consult its problem-to-reference index before investigating a similar issue from scratch.
+
+| Existing owner | Reference retained for a matching problem | Promotion rule |
+|---|---|---|
+| L-04 | Let's Go mod selection and outer RomFS overrides | Reuse our overlay; investigate inner-resource boundaries before promising a map replacement |
+| L-05 | Let's Go targeted RenderDoc capture and draw/skin inspection helpers | A reproduced graphics defect and a matched-frame capture justify a bounded card |
+| L-08 / A-01 | uDPR stage state/logging, adapted as REF-05 | Gate-backed resume and invalidation tests; one writer and explicit command authorization |
+| L-08 / R-01 | Let's Go bounded hooks and store tracing beyond REF-04 | Extend profiling first; add invasive instrumentation only when the selected question needs it |
+| L-02 / L-08 | Let's Go cross-build normalized instruction matching | Candidate discovery only; validate build identity and semantics before accepting a mapped function |
+
+No upstream tool or game-specific address is imported automatically. Keep deferred performance/crash work separate.
+
 ## Existing user deferrals
 
 | ID | State | Scope | Resume condition |

@@ -6,7 +6,7 @@ retries with the exact errors (max 3), or finishes it editorially. Never install
 
 Usage:
   python tools/workers/local_worker.py --task work/cards/W01-x.md --out path/to/file.py \
-      [--ctx a.py b.h] [--lang python] [--model devstral:24b] [--num-ctx 32768]
+      [--ctx a.py b.h] [--lang python] [--model qwen3.8:27b] [--num-ctx 32768]
 Output: writes --out and prints JSON stats (tokens, tok/s, seconds). Exit 0 = a code block was found.
 """
 import argparse, json, re, sys, time, urllib.request
@@ -29,7 +29,7 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--ctx", nargs="*", default=[])
     ap.add_argument("--lang", default="", help="hint appended to the prompt, e.g. python / c / cpp")
-    ap.add_argument("--model", default="devstral:24b")
+    ap.add_argument("--model", default="qwen3.8:27b")
     ap.add_argument("--num-ctx", type=int, default=32768)
     ap.add_argument("--host", default="http://127.0.0.1:11434")
     ap.add_argument("--temperature", type=float, default=0.2)
@@ -42,7 +42,7 @@ def main():
     if a.lang:
         parts.append(f"\nAnswer with one ```{a.lang} code block.")
     body = {
-        "model": a.model, "stream": False, "keep_alive": "5m",
+        "model": a.model, "stream": False, "keep_alive": "5m", "think": False,
         "options": {"num_ctx": a.num_ctx, "temperature": a.temperature, "repeat_penalty": a.repeat_penalty},
         "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": "\n".join(parts)}],
     }

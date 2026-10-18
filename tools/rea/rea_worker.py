@@ -13,7 +13,7 @@ Exit code 0 = report accepted (still to be reviewed by Claude), 2 = contract fai
 Usage:
   python tools/rea/rea_worker.py --target "D:\\Dev\\REA\\lab\\targets\\x.exe" \
       --question "Which function calls LookupAccountSidW and what does it do?" \
-      --out D:\\Dev\\REA\\lab\\reports\\x-topic.md [--model devstral:24b] [--max-steps 14]
+      --out D:\\Dev\\REA\\lab\\reports\\x-topic.md [--model qwen3.8:27b] [--max-steps 14]
 """
 import argparse, json, os, re, subprocess, sys, time, urllib.request
 from pathlib import Path
@@ -192,7 +192,7 @@ def check_report(report, seen_ids, ok_calls, seen_text=""):
 
 
 def chat(model, messages):
-    body = json.dumps({"model": model, "messages": messages, "tools": TOOLS, "stream": False,
+    body = json.dumps({"model": model, "messages": messages, "tools": TOOLS, "stream": False, "think": False,
                        "options": {"temperature": 0.2}}).encode()
     req = urllib.request.Request(OLLAMA, body, {"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=1800) as r:
@@ -204,7 +204,7 @@ def main():
     ap.add_argument("--target", required=True)
     ap.add_argument("--question", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--model", default="devstral:24b")
+    ap.add_argument("--model", default="qwen3.8:27b")
     ap.add_argument("--max-steps", type=int, default=14)
     a = ap.parse_args()
     out = Path(a.out); out.parent.mkdir(parents=True, exist_ok=True)

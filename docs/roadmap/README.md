@@ -43,7 +43,7 @@ Full provenance and rejected overclaims: [evidence ledger](evidence.md).
 
 | Track | Purpose | Current status | Exit condition |
 |---|---|---|---|
-| [B — Baseline and safety](baseline.md) | Establish reproducible current builds/routes and protect saves | Open; latest recorded headless host gate failed (run_id=648a2fa61b) | B-01 through B-04 have evidence |
+| [B — Baseline and safety](baseline.md) | Establish reproducible current builds/routes and protect saves | B-01/B-02 fresh evidence; B-03 closed (new game run_id=38c0cfbc90; 600 s copied save run_id=e559998a17; human checkpoint in manual-test-2026-10-18.md); B-04 recovery run_id=7ea127f858 and run_id=d6946b460e | B-01 through B-04 have evidence |
 | [A — Application](application.md) | Finish launcher and validate existing settings/input | Partial implementation, open acceptance | A-01 through A-04 have evidence |
 | [R — Scene and data study](scene-study.md) | Trace one small scene and understand only its required resources | Open | R-01 through R-04 produce reviewed evidence and a safe override decision |
 | [C — Custom platform](custom-platform.md) | Reversible replacement of a small area with geometry, collision and entry | Not started; depends on B and R | C-01 through C-04 are demonstrated |
@@ -53,6 +53,16 @@ Full provenance and rejected overclaims: [evidence ledger](evidence.md).
 B-02/B-03 gameplay baseline and B-04 save isolation/recovery policy precede mod execution; read-only R research
 can start after the relevant tools are available. Starting a later experiment does not erase a failed baseline task.
 This is a planning order, not evidence that implementation has begun or a new approval to resume deferred features.
+
+## Selected reference adaptations
+
+The user selected useful ideas from Let's Go Recomp and uDPR for planned adaptation, not wholesale code import.
+[REF-01 through REF-06 and the troubleshooting index](reference-adaptations.md) assign each deliverable to an
+existing owner: A-01/A-02 for input/DLL/checkpoints, R-01/R-02 for profiling/resource inventory, and L-08 for
+resumable pipeline stages. The [source study](../reference-study-letsgo-udpr.md) records pinned snapshots and caveats.
+
+These items remain open. They do not add blanket prerequisites to B, replace our existing runtime, reopen prior
+B-01/B-02 acceptance, or resume D-01/D-02. Consult the problem-to-reference index when a matching issue appears.
 
 ## Relationship to the previous phases
 
@@ -77,9 +87,8 @@ Detailed old-task mapping is included in each track and in the [archive guide](a
 
 ## First action and constraints
 
-**Next bounded task: B-01**, reproduce the headless host failure and preserve its diagnostics before any fix.
-The known error is an undeclared `SDL_GetCurrentAudioDriver` at the recorded `audio.c:943`; it is not a diagnosis
-that the Vulkan application fails too. Do not edit product code as part of maintaining this roadmap.
+**Current execution:** B track is closed as evidence: B-01/B-02 fresh, B-03 closed (new game run_id=38c0cfbc90; 600 s copied save run_id=e559998a17; human checkpoints), B-04 bounded recovery. Read-only R investigation may advance independently; no deferred items auto-resumed. See [execution notes](execution-2026-10-17.md).
+Failed reproductions remain in the ledger; do not erase them or promote metric gates to visual acceptance.
 
 Keep 60 fps disabled and rare nondeterministic crashes under prior user deferrals. Escalate a crash if it becomes
 repeatable or blocks the chosen slice. Every implementation card has one owner, exact output paths, a bounded
